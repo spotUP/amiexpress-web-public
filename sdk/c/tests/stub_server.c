@@ -651,6 +651,8 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         st->rooms_created++;
         chat_copy_json_field(st->last_created, sizeof st->last_created, body, "name");
         chat_copy_json_field(st->last_created_kind, sizeof st->last_created_kind, body, "kind");
+        chat_copy_json_field(st->last_created_topic, sizeof st->last_created_topic, body, "topic");
+        chat_copy_json_field(st->last_created_vis, sizeof st->last_created_vis, body, "visibility");
         chat_reply(fd, 200, "application/json", "{\"id\":\"newroom\",\"name\":\"newroom\",\"visibility\":\"public\"}");
     } else if (is_post && strstr(path, "/join") != 0) {
         st->joins++;

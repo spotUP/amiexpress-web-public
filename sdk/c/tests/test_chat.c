@@ -464,6 +464,7 @@ static void test_door_room_kind(void)
     rc = drive(KEYS("\r" "/create Sketch\r" "\x1b[B" "\x1b[B" "\r" "/q\r"), 0);
     assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "Sketch") == 0);
     assert(strcmp(st->last_created_kind, "art") == 0);
+    assert(has_line(0, "Creating #Sketch..."));                    /* TS pickRoomKind: Art is refused, so the log stays */
     assert(has_line(0, "Channel type: Text, Voice or Art?"));
     assert(has_line(0, "Art channels are not on Amiga yet."));
     assert(st->joins == 1);                                        /* only the auto-join: Art is not opened */
@@ -482,6 +483,19 @@ static void test_door_room_kind(void)
     start_stub();
     rc = drive(KEYS("\r" "/create Bad --type sound\r" "/q\r"), 0);
     assert(rc == 0 && st->rooms_created == 0);
+    assert(has_line(0, "Error: Channel type must be text, voice or art."));
+    stop_stub();
+    start_stub();                                                  /* TS createCmd: name, topic, flags, motd */
+    rc = drive(KEYS("\r" "/create #Den Cozy corner --type text --invite-only --motd \"Be nice\"\r" "/q\r"), 0);
+    assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "Den") == 0);
+    assert(strcmp(st->last_created_topic, "Cozy corner") == 0 && strcmp(st->last_created_vis, "private") == 0);
+    assert(strcmp(st->last_created_kind, "text") == 0);
+    assert(st->room_motd_puts == 1 && strcmp(st->room_motd, "Be nice") == 0);
+    stop_stub();
+    start_stub();                                                  /* the picker path keeps the topic; Esc cancels */
+    drive(KEYS("\r" "/create Nook Quiet --private\r" "\x1b"), 0);
+    assert(st->rooms_created == 0);
+    assert(has_line(0, "#Nook was not created."));
     stop_stub();
     printf("  [OK] door: /create asks the channel type, --type skips it, Voice and Art rooms are marked and refused\n");
 }

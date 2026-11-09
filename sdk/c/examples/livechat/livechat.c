@@ -110,8 +110,10 @@ static char rooms_name[ROOMS_MAX][40];
 static char rooms_kind[ROOMS_MAX][8];     /* text, voice or art (TS commands/chan-admin.ts ROOM_KINDS) */
 static int rooms_count;
 
-/* /create's name and visibility while the channel-type picker is open. */
+/* /create's name, topic, visibility and motd while the channel-type picker is open. */
 static char pending_room[40];
+static char pending_topic[100];
+static char pending_motd[128];
 static const char *pending_vis = "public";
 
 enum { PROMPT_JOIN, PROMPT_CREATE, PROMPT_NOTE };
@@ -1138,12 +1140,14 @@ static void next_channel(void)
     join_room(rooms_id[(i + 1) % rooms_count]);
 }
 
-/** Makes a room of `kind` and walks into it. The server joins by id, so the id comes from the create reply. */
-static void new_room(const char *name, const char *visibility, const char *kind)
+/** Makes a room of `kind` and walks into it. The server joins by id, so the id comes from the create reply.
+ *  TS room:create carries the motd; the hub sets it with PUT /rooms/:id/motd once the room exists. */
+static void new_room(const char *name, const char *topic, const char *visibility, const char *kind, const char *motd)
 {
     char id[sizeof room_id], line[80];
-    int rc = ae_chat_room_create(&chat, name, "", visibility, kind, id, (int)sizeof id);
+    int rc = ae_chat_room_create(&chat, name, topic, visibility, kind, id, (int)sizeof id);
     if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    if (motd[0] != '\0' && (rc = ae_chat_room_motd(&chat, id, motd)) != AE_CHAT_OK) show_error(rc);
     load_rooms();
     /* The kind is known here; a stale room list must not let a Voice or Art room be joined. */
     rc = strcmp(kind, "text") != 0 ? refuse_kind(kind) : join_room(id);
@@ -1154,19 +1158,22 @@ static void new_room(const char *name, const char *visibility, const char *kind)
 }
 
 static void ctx_open(int kind, int target, int row, int col);
+static void kind_cancelled(void);
 static void arg_word(const char *text, char *out, size_t cap);
 static void usage(const char *text);
 
 /** TS server.ts pickRoomKind: every new channel gets a type, asked before it reaches the hub. */
-static void ask_room_kind(const char *name, const char *visibility)
+static void ask_room_kind(const char *name, const char *topic, const char *visibility, const char *motd)
 {
     clean(pending_room, sizeof pending_room, name);
+    clean(pending_topic, sizeof pending_topic, topic);
+    clean(pending_motd, sizeof pending_motd, motd);
     pending_vis = visibility;
     system_line("Channel type: Text, Voice or Art?");
     ctx_open(LC_CTX_KIND, 0, M.rows / 2 - 2, M.cols / 2 - 6);
 }
 
-/** /create name [--type text|voice|art]: the flag skips the question, as in TS commands/chan-admin.ts. */
+/** /n, /np and the New room prompt: the whole text is the name (it may have spaces), --type skips the question. */
 static void create_typed(const char *text, const char *visibility)
 {
     char name[sizeof pending_room], kind[16];
@@ -1187,8 +1194,65 @@ static void create_typed(const char *text, const char *visibility)
     while (n > 0 && name[n - 1] == ' ') name[--n] = '\0';
     if (name[0] == '#') memmove(name, name + 1, strlen(name));
     if (name[0] == '\0') { usage("/create #name [--type text|voice|art]"); return; }
-    if (kind[0] != '\0') new_room(name, visibility, kind);
-    else ask_room_kind(name, visibility);
+    if (kind[0] != '\0') new_room(name, "", visibility, kind, "");
+    else ask_room_kind(name, "", visibility, "");
+}
+
+#define CREATE_USAGE "/create #name [topic] [--type text|voice|art] [--private] [--invite-only] [--motd \"text\"]"
+
+/** TS commands/chan-admin.ts createCmd: the first word is the name, the other plain words the topic.
+ *  --private and --invite-only both make the room members-only (the hub has only public and private),
+ *  --type skips the question, --motd takes the words up to the next flag. */
+static void create_flags(const char *text)
+{
+    char name[sizeof pending_room], topic[sizeof pending_topic], motd[sizeof pending_motd], kind[16], w[128];
+    const char *p = text, *vis = "public";
+    arg_word(p, w, sizeof w);
+    if (w[0] == '\0') { usage(CREATE_USAGE); return; }
+    clean(name, sizeof name, w[0] == '#' ? w + 1 : w);
+    topic[0] = motd[0] = kind[0] = '\0';
+    for (;;) {
+        while (*p == ' ') p++;
+        while (*p != '\0' && *p != ' ') p++;                   /* past the word just read */
+        arg_word(p, w, sizeof w);
+        if (w[0] == '\0') break;
+        if (strcmp(w, "--private") == 0 || strcmp(w, "--invite-only") == 0) vis = "private";
+        else if (strcmp(w, "--type") == 0) {
+            int i;
+            while (*p == ' ') p++;
+            while (*p != '\0' && *p != ' ') p++;
+            arg_word(p, kind, sizeof kind);
+            for (i = 0; kind[i] != '\0'; i++) kind[i] = (char)tolower((unsigned char)kind[i]);
+            if (strcmp(kind, "text") != 0 && strcmp(kind, "voice") != 0 && strcmp(kind, "art") != 0) {
+                system_line("Error: Channel type must be text, voice or art.");
+                return;
+            }
+        } else if (strcmp(w, "--motd") == 0) {
+            const char *q;
+            size_t n;
+            while (*p == ' ') p++;
+            while (*p != '\0' && *p != ' ') p++;
+            while (*p == ' ') p++;
+            q = strstr(p, " --");
+            n = q != 0 ? (size_t)(q - p) : strlen(p);
+            if (n > sizeof motd - 1) n = sizeof motd - 1;
+            memcpy(motd, p, n);
+            motd[n] = '\0';
+            while (n > 0 && motd[n - 1] == ' ') motd[--n] = '\0';
+            if (n > 0 && (motd[n - 1] == '"' || motd[n - 1] == '\'')) motd[--n] = '\0';
+            if (motd[0] == '"' || motd[0] == '\'') memmove(motd, motd + 1, strlen(motd));
+            p += q != 0 ? (size_t)(q - p) : strlen(p);
+            continue;
+        } else if (strlen(topic) + strlen(w) + 2 <= sizeof topic) {
+            if (topic[0] != '\0') strcat(topic, " ");
+            strcat(topic, w);
+        }
+    }
+    if (kind[0] != '\0') {
+        sprintf(w, "Creating #%.40s...", name);
+        system_line(w);
+        new_room(name, topic, vis, kind, motd);
+    } else ask_room_kind(name, topic, vis, motd);
 }
 
 static void list_rooms(void)
@@ -2325,7 +2389,8 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "clear", "cls")) { lines_clear(); return 0; }
     if (is_cmd(cmd, "n", "np") || strcmp(cmd, "create") == 0) {
         if (*rest == '\0') { open_prompt(PROMPT_CREATE, "New room name"); return 0; }
-        create_typed(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
+        if (cmd[0] == 'c') create_flags(rest);                       /* TS createCmd: name, topic, flags */
+        else create_typed(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
         return 0;
     }
     if (is_cmd(cmd, "r", "reply")) { reply_typed(rest, 0); return 0; }
@@ -2737,7 +2802,12 @@ static void ctx_run(const char *it)
         int i;
         for (i = 0; it[i] != '\0' && i < (int)sizeof kind - 1; i++) kind[i] = (char)tolower((unsigned char)it[i]);
         kind[i] = '\0';
-        if (pending_room[0] != '\0') new_room(pending_room, pending_vis, kind);
+        if (pending_room[0] != '\0') {
+            char line[64];
+            sprintf(line, "Creating #%.40s...", pending_room);     /* TS input-submit-handler pickRoomKind */
+            system_line(line);
+            new_room(pending_room, pending_topic, pending_vis, kind, pending_motd);
+        }
         pending_room[0] = '\0';
     } else if (M.ctx_kind == LC_CTX_REACT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
@@ -2820,6 +2890,7 @@ static int handle_mouse(void)
         if (M.ctx.open) {
             int pick = ui_popup_click(&M.ctx, row, col);
             if (pick >= 0) ctx_run(M.ctx.items[pick]);
+            else if (pick == UI_POPUP_CLOSE) kind_cancelled();
             if (pick != UI_POPUP_CLOSE || hit == LC_HIT_POPUP) continue;
         }
         if (M.modal == LC_MODAL_QUIT) {
@@ -2965,6 +3036,16 @@ static int slash_key(int key)
     return 1;
 }
 
+/** TS pickRoomKind(null): the type picker closed without a pick, so nothing reaches the hub. */
+static void kind_cancelled(void)
+{
+    char line[64];
+    if (M.ctx_kind != LC_CTX_KIND || pending_room[0] == '\0') return;
+    sprintf(line, "#%.40s was not created.", pending_room);
+    system_line(line);
+    pending_room[0] = '\0';
+}
+
 /** One key. Returns 1 when the door should end. */
 static int handle_key(int key)
 {
@@ -2972,6 +3053,7 @@ static int handle_key(int key)
     if (M.ctx.open) {
         int pick = ui_popup_key(&M.ctx, key);
         if (pick >= 0) ctx_run(M.ctx.items[pick]);
+        else if (pick == UI_POPUP_CLOSE) kind_cancelled();
         return 0;
     }
     if (M.help) {
