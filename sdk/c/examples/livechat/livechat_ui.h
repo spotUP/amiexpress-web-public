@@ -139,13 +139,37 @@ typedef struct {
     int slash_sel, slash_top;      /* the "/" menu: selected match, first visible match */
     int slash_off;                 /* Esc hid the menu until the next typed character */
     int editing;                   /* the input holds a recalled history line: Enter edits it (label [EDITING]) */
+    /* The format picker (TS ui/format-picker.ts on the SDK CategoryPicker): shown over the input while
+       a selection is held still, or on F5. fmt_a..fmt_b is the selection it was opened for. */
+    int fmt;                       /* shown */
+    int fmt_cat, fmt_item, fmt_item_top;
+    int fmt_pane;                  /* LC_FMT_PANE_*: which list has the keys */
+    int fmt_a, fmt_b;
+    const unsigned long *rgb;      /* the caller's theme tokens, 0xRRGGBB in ui_token order (the picker's colours) */
 } lc_model;
+
+/* ---- the format picker ---- */
+#define LC_FMT_CATS 3
+#define LC_FMT_H    10             /* format-picker.ts: height 10 */
+enum { LC_FMT_PANE_CAT, LC_FMT_PANE_ITEM };
+const char *lc_fmt_cat_name(int cat);
+int lc_fmt_count(int cat);
+const char *lc_fmt_name(int cat, int item);
+/** The selected text wrapped as format-picker.ts FORMATS[cat][item].wrap does, colours from `rgb`
+ *  (the theme tokens, as T.* are in TS). Returns the length, or -1 when it does not fit `cap`. */
+int lc_fmt_wrap(char *out, int cap, int cat, int item, const char *text, int len, const unsigned long *rgb);
+/** Open the picker for the selection a..b of the input (CategoryPicker.display at the TS
+ *  getSelectionPosition: x = input left + 1 + selection start, y = input top + 1). */
+void lc_fmt_open(lc_model *m, int a, int b);
+/** Move the focused list's selection by `delta` (category moves reload the items at row 0). */
+void lc_fmt_move(lc_model *m, int delta);
 
 enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL, LC_CTX_REACT };   /* REACT: the chat menu's reaction picker */
 
 /* What a click lands on, from the regions the last lc_draw laid out. */
 enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, LC_HIT_INPUT,
-       LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL, LC_HIT_SCROLLBAR };
+       LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL, LC_HIT_SCROLLBAR,
+       LC_HIT_FMT, LC_HIT_FMT_CAT, LC_HIT_FMT_ITEM, LC_HIT_FMT_CLOSE };
 
 #define LC_SCROLL_TRACK 66
 #define LC_SCROLL_THUMB 195

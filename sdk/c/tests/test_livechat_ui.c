@@ -6,6 +6,7 @@
 
 #include "ui_cells.h"
 #include "livechat_ui.h"
+#include "ui_theme.h"
 
 static void add_line(lc_model *m, int kind, const char *time, const char *nick, const char *text)
 {
@@ -426,9 +427,34 @@ static int event_line_marks(void)
     return fail;
 }
 
+/* C2: the TS format picker model. FORMATS wraps (format-picker.ts): Colors use the theme token as hex,
+ * Effects the ~name~ tags, Markdown its marks. The category list clamps and reloads the items at 0. */
+static int format_picker_model(void)
+{
+    char out[64];
+    lc_model m;
+    int fail = 0;
+    const unsigned long *rgb = ui_theme_by_id("")->rgb;
+    char red[32];
+    snprintf(red, sizeof red, "{#%06lX-fg}hi{/}", rgb[UI_T_ALERT] & 0xFFFFFFUL);
+    if (lc_fmt_wrap(out, sizeof out, 2, 0, "hi", 2, rgb) != 6 || strcmp(out, "**hi**") != 0) { printf("fmt: bold '%s'\n", out); fail = 1; }
+    if (lc_fmt_wrap(out, sizeof out, 0, 0, "hi", 2, rgb) < 0 || strcmp(out, red) != 0) { printf("fmt: red '%s'\n", out); fail = 1; }
+    if (lc_fmt_wrap(out, 5, 2, 0, "hi", 2, rgb) != -1) { printf("fmt: overflow not refused\n"); fail = 1; }
+    if (lc_fmt_wrap(out, sizeof out, 2, 99, "hi", 2, rgb) != -1) { printf("fmt: bad item not refused\n"); fail = 1; }
+    memset(&m, 0, sizeof m);
+    lc_fmt_open(&m, 5, 2);
+    if (!m.fmt || m.fmt_a != 2 || m.fmt_b != 5 || m.fmt_pane != LC_FMT_PANE_CAT) { printf("fmt: open\n"); fail = 1; }
+    lc_fmt_move(&m, 9);
+    if (m.fmt_cat != LC_FMT_CATS - 1) { printf("fmt: cat clamp %d\n", m.fmt_cat); fail = 1; }
+    m.fmt_pane = LC_FMT_PANE_ITEM;
+    lc_fmt_move(&m, 99);
+    if (m.fmt_item != lc_fmt_count(m.fmt_cat) - 1) { printf("fmt: item clamp %d\n", m.fmt_item); fail = 1; }
+    return fail;
+}
+
 int main(void)
 {
-    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules() | message_formatting() | event_line_marks() | system_line_tone();
+    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules() | message_formatting() | event_line_marks() | system_line_tone() | format_picker_model();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

@@ -196,13 +196,14 @@ describe('Home, End, Page Up and Page Down reach an SDK door as one converted by
 
   // K19: Delete and Shift+Left/Right/Home/End were dropped as unknown escape
   // sequences, so the SDK line editor could never select or forward-delete.
-  test('Delete and Shift+Left/Right/Home/End arrive as one C1 byte each', () => {
+  test('Delete, Shift+Left/Right/Home/End and F5 arrive as one C1 byte each', () => {
     const cases: Array<[string, number]> = [
       ['\x1b[3~', 0x80],   // Delete
       ['\x1b[1;2D', 0x81], // Shift+Left
       ['\x1b[1;2C', 0x82], // Shift+Right
       ['\x1b[1;2H', 0x83], // Shift+Home
       ['\x1b[1;2F', 0x84], // Shift+End
+      ['\x1b[15~', 0x85],  // F5 (LiveChat's format picker)
     ];
     for (const [typed, code] of cases) {
       expect(typeAndFetch(typed)).toEqual([code]);
@@ -212,7 +213,7 @@ describe('Home, End, Page Up and Page Down reach an SDK door as one converted by
 
   test('an unrelated escape sequence is still ignored', () => {
     expect(typeAndFetch('\x1b[2~')).toEqual([0]);   // Insert
-    expect(typeAndFetch('\x1b[15~')).toEqual([0]);  // F5
+    expect(typeAndFetch('\x1b[17~')).toEqual([0]);  // F6
   });
 });
 

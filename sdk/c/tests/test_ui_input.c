@@ -99,7 +99,7 @@ static void the_arrows_decode(void)
 static void the_function_keys_and_backtab_decode(void)
 {
     typist t; ui_key_source src; int pushback = -1;
-    t.keys = "\x1bOP\x1bOQ\x1bOR\x1bOS\x1b[Zx"; t.at = 0; t.overrun = 0;
+    t.keys = "\x1bOP\x1bOQ\x1bOR\x1bOS\x1b[Z\x85\x1b[15~\x1b[17~x"; t.at = 0; t.overrun = 0;
     src = source_for(&t);
 
     assert(ui_key_read(&src, &pushback) == UI_KEY_F1);
@@ -107,8 +107,11 @@ static void the_function_keys_and_backtab_decode(void)
     assert(ui_key_read(&src, &pushback) == UI_KEY_F3);
     assert(ui_key_read(&src, &pushback) == UI_KEY_F4);
     assert(ui_key_read(&src, &pushback) == UI_KEY_BACKTAB);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_F5);   /* the board's AE_KEY_F5 byte */
+    assert(ui_key_read(&src, &pushback) == UI_KEY_F5);   /* ESC [ 1 5 ~ from a terminal: was HOME then '~' */
+    assert(ui_key_read(&src, &pushback) == 0);           /* F6: read whole, not a key */
     assert(ui_key_read(&src, &pushback) == 'x');     /* nothing of a sequence leaks into the next key */
-    printf("  [OK] F1-F4 (ESC O P..S) and Shift-Tab (ESC [ Z) decode\n");
+    printf("  [OK] F1-F5 (ESC O P..S, ESC [ 1 5 ~, board 0x85) and Shift-Tab (ESC [ Z) decode\n");
 }
 
 static void the_boards_own_arrow_codes_decode(void)

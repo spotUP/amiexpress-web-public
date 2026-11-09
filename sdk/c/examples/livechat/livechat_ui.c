@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "livechat_ui.h"
+#include "ui_theme.h"
 
 #define MENU_TEXT " Chat v3.2.0   Tools   View   Help  "
 #define MENU_TEXT_COLS 36
@@ -290,34 +291,45 @@ static int hex_digit(int ch)
     return ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
 }
 
+/* 0xRRGGBB to the nearest xterm cube colour. */
+static int rgb_cube(unsigned long rgb)
+{
+    int v[3], i;
+    v[0] = (int)((rgb >> 16) & 255); v[1] = (int)((rgb >> 8) & 255); v[2] = (int)(rgb & 255);
+    for (i = 0; i < 3; i++) v[i] = v[i] < 48 ? 0 : v[i] < 115 ? 1 : (v[i] - 35) / 40;
+    return 16 + 36 * v[0] + 6 * v[1] + v[2];
+}
+
 /* "#rrggbb" (the theme tokens the format picker writes, ui/format-picker.ts:21-28) to the nearest xterm cube colour. */
 static int hex_color(const char *s, int len)
 {
-    int v[3], i;
+    unsigned long rgb = 0;
+    int i;
     if (len != 7 || s[0] != '#') return -1;
-    for (i = 0; i < 3; i++) {
-        int hi = hex_digit(s[1 + 2 * i]), lo = hex_digit(s[2 + 2 * i]);
-        if (hi < 0 || lo < 0) return -1;
-        v[i] = hi * 16 + lo;
-        v[i] = v[i] < 48 ? 0 : v[i] < 115 ? 1 : (v[i] - 35) / 40;
+    for (i = 1; i < 7; i++) {
+        int d = hex_digit(s[i]);
+        if (d < 0) return -1;
+        rgb = rgb * 16 + (unsigned long)d;
     }
-    return 16 + 36 * v[0] + 6 * v[1] + v[2];
+    return rgb_cube(rgb);
 }
 
 /* "~rainbow~" ... "~/rainbow~": the animation tags (format-picker.ts:31-36). The door animates nothing, so a run takes
  * the static look the TS picker previews for it (format-picker.ts:116-121). Returns the tag length, 0 when s is no tag. */
+static const struct { const char *name, *label; int fg, bold; } fx[] = {
+    { "rainbow", "Rainbow", LC_ACTIVITY, 1 }, { "pulse", "Pulse", LC_ACCENT, 1 }, { "sparkle", "Sparkle", LC_ACTIVITY, 1 },
+    { "shake", "Shake", LC_ALERT, 1 }, { "wave", "Wave", LC_GREY, 1 }, { "gradient", "Gradient", LC_ACCENT, 0 } };
+#define FX_COUNT 6
+
 static int effect_tag(const char *s, int *closing, int *fg, int *bold)
 {
-    static const struct { const char *name; int fg, bold; } fx[] = {
-        { "rainbow", LC_ACTIVITY, 1 }, { "pulse", LC_ACCENT, 1 }, { "sparkle", LC_ACTIVITY, 1 },
-        { "shake", LC_ALERT, 1 }, { "wave", LC_GREY, 1 }, { "gradient", LC_ACCENT, 0 } };
     const char *p = s + 1, *end;
     size_t i;
     *closing = 0;
     if (*p == '/') { *closing = 1; p++; }
     end = strchr(p, '~');
     if (end == 0) return 0;
-    for (i = 0; i < sizeof fx / sizeof fx[0]; i++) {
+    for (i = 0; i < FX_COUNT; i++) {
         size_t nl = strlen(fx[i].name);
         if (strncmp(p, fx[i].name, nl) == 0 && (p + nl == end || (!*closing && p[nl] == ' '))) {
             *fg = fx[i].fg;
@@ -766,14 +778,20 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     }
 }
 
+/* The first input character on screen: the input scrolls to keep the cursor in its box. */
+static int input_from(int W, const lc_model *m)
+{
+    int iw = (W - 6 >= 24) ? W - 6 : W, room = iw - 3;
+    return m->input_cur > room ? m->input_cur - room : 0;
+}
+
 static void draw_input(ui_cells *c, const lc_model *m, int *cr, int *cc)
 {
-    int W = c->cols, row = c->rows - 4, iw = (W - 6 >= 24) ? W - 6 : W, room = iw - 3, from;
+    int W = c->cols, row = c->rows - 4, iw = (W - 6 >= 24) ? W - 6 : W, room = iw - 3, from = input_from(W, m);
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     ui_cells_fill(c, row + 1, 1, 1, iw - 2, ' ');
     ui_cells_box(c, row, 0, 3, iw, m->focus == LC_FOCUS_INPUT ? LC_BORDER_FOCUS : LC_ACCENT,
                  m->pick[0] != '\0' ? "[PICK MESSAGE: Up/Down, Enter, Esc]" : m->editing ? "[EDITING]" : "Message", LC_INK);
-    from = m->input_cur > room ? m->input_cur - room : 0;
     ui_cells_text(c, row + 1, 1, m->input + from, room);
     if (m->input_anchor >= 0 && m->input_anchor != m->input_cur) {   /* the Shift selection, inverse */
         int a = m->input_anchor < m->input_cur ? m->input_anchor : m->input_cur;
@@ -960,7 +978,7 @@ static void draw_slash(ui_cells *c, const lc_model *m)
 {
     int idx[LC_SLASH_MAX], n, rows, top, i, W = c->cols, brow = c->rows - 4;
     char row[200];
-    if (m->slash_off || m->focus != LC_FOCUS_INPUT || m->modal != LC_MODAL_NONE) return;
+    if (m->slash_off || m->fmt || m->focus != LC_FOCUS_INPUT || m->modal != LC_MODAL_NONE) return;
     n = lc_slash_match(m->input, idx, LC_SLASH_MAX);
     if (n == 0) return;
     rows = n < LC_SLASH_ROWS ? n : LC_SLASH_ROWS;
@@ -981,6 +999,133 @@ static void draw_slash(ui_cells *c, const lc_model *m)
         }
     }
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+}
+
+/* ---- the format picker: TS ui/format-picker.ts FORMATS on the SDK CategoryPicker
+ *      (engines/ui/blessed/widgets/category-picker.ts) ---- */
+static const char *const fmt_cats[LC_FMT_CATS] = { "Colors", "Effects", "Markdown" };
+static const struct { const char *name; int tok; } fmt_colors[] = {
+    { "Red", UI_T_ALERT }, { "Green", UI_T_OK }, { "Blue", UI_T_BAR }, { "Yellow", UI_T_ACCENT_ALT },
+    { "Cyan", UI_T_ACCENT }, { "Magenta", UI_T_ACCENT_ALT }, { "White", UI_T_INK }, { "Gray", UI_T_DIM } };
+static const struct { const char *name, *open, *close; } fmt_md[] = {
+    { "Bold", "**", "**" }, { "Italic", "*", "*" }, { "Underline", "__", "__" }, { "Strike", "~~", "~~" }, { "Code", "`", "`" } };
+static const int fmt_counts[LC_FMT_CATS] = { 8, FX_COUNT, 5 };
+#define FMT_ITEM_ROWS 6            /* the item list: height 100% of the 8 content rows, less its border */
+
+const char *lc_fmt_cat_name(int cat) { return cat >= 0 && cat < LC_FMT_CATS ? fmt_cats[cat] : ""; }
+int lc_fmt_count(int cat) { return cat >= 0 && cat < LC_FMT_CATS ? fmt_counts[cat] : 0; }
+
+const char *lc_fmt_name(int cat, int item)
+{
+    if (item < 0 || item >= lc_fmt_count(cat)) return "";
+    return cat == 0 ? fmt_colors[item].name : cat == 1 ? fx[item].label : fmt_md[item].name;
+}
+
+static const unsigned long *fmt_rgb(const unsigned long *rgb)
+{
+    return rgb != 0 ? rgb : ui_theme_by_id("")->rgb;
+}
+
+int lc_fmt_wrap(char *out, int cap, int cat, int item, const char *text, int len, const unsigned long *rgb)
+{
+    int n;
+    if (len < 0) len = (int)strlen(text);
+    if (item < 0 || item >= lc_fmt_count(cat) || cap <= 0) return -1;
+    if (cat == 0)        /* {T.x-fg}t{/} */
+        n = snprintf(out, (size_t)cap, "{#%06lX-fg}%.*s{/}", fmt_rgb(rgb)[fmt_colors[item].tok] & 0xFFFFFFUL, len, text);
+    else if (cat == 1)   /* ~name~t~/name~; gradient carries from=red to=blue */
+        n = snprintf(out, (size_t)cap, "~%s%s~%.*s~/%s~", fx[item].name,
+                     strcmp(fx[item].name, "gradient") == 0 ? " from=red to=blue" : "", len, text, fx[item].name);
+    else
+        n = snprintf(out, (size_t)cap, "%s%.*s%s", fmt_md[item].open, len, text, fmt_md[item].close);
+    return n < 0 || n >= cap ? -1 : n;
+}
+
+void lc_fmt_open(lc_model *m, int a, int b)
+{
+    m->fmt = 1;
+    m->fmt_cat = m->fmt_item = m->fmt_item_top = 0;
+    m->fmt_pane = LC_FMT_PANE_CAT;
+    m->fmt_a = a < b ? a : b;
+    m->fmt_b = a < b ? b : a;
+}
+
+void lc_fmt_move(lc_model *m, int delta)
+{
+    if (m->fmt_pane == LC_FMT_PANE_CAT) {
+        int k = m->fmt_cat + delta;
+        if (k < 0) k = 0;
+        if (k >= LC_FMT_CATS) k = LC_FMT_CATS - 1;
+        if (k != m->fmt_cat) { m->fmt_cat = k; m->fmt_item = m->fmt_item_top = 0; }   /* category-picker.ts: reload at 0 */
+    } else {
+        int n = lc_fmt_count(m->fmt_cat), k = m->fmt_item + delta;
+        if (k >= n) k = n - 1;
+        if (k < 0) k = 0;
+        m->fmt_item = k;
+        if (k < m->fmt_item_top) m->fmt_item_top = k;
+        if (k >= m->fmt_item_top + FMT_ITEM_ROWS) m->fmt_item_top = k - FMT_ITEM_ROWS + 1;
+    }
+}
+
+/* CategoryPicker.display at the TS getSelectionPosition (x = input left + 1 + selection start, y = input top + 1):
+ * above the input when it fits, else below; kept on screen. */
+static void fmt_box(const ui_cells *c, const lc_model *m, int *top, int *left, int *w)
+{
+    int W = c->cols, x = 1 + m->fmt_a - input_from(W, m), y = c->rows - 3;
+    *w = W - 2 > 45 ? 45 : W - 2 < 20 ? 20 : W - 2;
+    *top = y - LC_FMT_H - 1;
+    if (*top < 0) *top = y + 1;
+    *left = x - 2;
+    if (*left + *w > W) *left = W - *w;
+    if (*left < 0) *left = 0;
+    if (*top < 0) *top = 0;
+}
+
+static void draw_fmt(ui_cells *c, const lc_model *m)
+{
+    const unsigned long *rgb = fmt_rgb(m->rgb);
+    int ground = rgb_cube(rgb[UI_T_GROUND]), ok = rgb_cube(rgb[UI_T_OK]), alt = rgb_cube(rgb[UI_T_ACCENT_ALT]);
+    int top, left, w, catw, ix, iw, n = lc_fmt_count(m->fmt_cat), i;
+    char label[24];
+    fmt_box(c, m, &top, &left, &w);
+    catw = w - 24 > 14 ? 14 : w - 24 < 8 ? 8 : w - 24;
+    ix = left + 1 + catw;
+    iw = w - 2 - catw;
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_fill(c, top + 1, left + 1, LC_FMT_H - 2, w - 2, ' ');
+    ui_cells_box(c, top, left, LC_FMT_H, w, LC_ACCENT, " Format ", LC_INK);
+    ui_cells_box(c, top + 1, left + 1, LC_FMT_H - 4, catw, ok, " Category ", LC_INK);   /* height 100%-2 */
+    for (i = 0; i < LC_FMT_CATS; i++) {                          /* categoryStyle: selected ground on ok */
+        int sel = i == m->fmt_cat;
+        ui_cells_pen(c, sel ? ground : LC_INK, sel ? ok : UI_CELLS_DEFAULT, 0);
+        ui_cells_fill(c, top + 2 + i, left + 2, 1, catw - 2, ' ');
+        ui_cells_text(c, top + 2 + i, left + 3, fmt_cats[i], catw - 3);
+    }
+    sprintf(label, " %s ", fmt_cats[m->fmt_cat]);
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_box(c, top + 1, ix, LC_FMT_H - 2, iw, alt, label, LC_INK);
+    for (i = 0; i < FMT_ITEM_ROWS && m->fmt_item_top + i < n; i++) {   /* itemStyle: selected on accentAlt */
+        int k = m->fmt_item_top + i, sel = k == m->fmt_item, r = top + 2 + i, bg = sel ? alt : UI_CELLS_DEFAULT;
+        int fg = sel ? ground : LC_INK, bold = 0, under = 0;
+        if (m->fmt_cat == 0) fg = rgb_cube(rgb[fmt_colors[k].tok]);                 /* the label in its own colour */
+        else if (m->fmt_cat == 1) { fg = fx[k].fg; bold = fx[k].bold; }            /* the effect's static look */
+        else if (k == 0) bold = 1;                                                  /* Bold */
+        else if (k == 1 || k == 2) under = 1;                                       /* Italic, Underline: blessed underline */
+        else if (k == 3) fg = rgb_cube(rgb[UI_T_DIM]);                              /* Strike: dim */
+        else { fg = rgb_cube(rgb[UI_T_INK]); bg = 0; }                              /* Code: ink on black */
+        ui_cells_pen(c, sel ? ground : LC_INK, sel ? alt : UI_CELLS_DEFAULT, 0);
+        ui_cells_fill(c, r, ix + 1, 1, iw - 2, ' ');
+        ui_cells_pen(c, fg, bg, bold);
+        sprintf(label, "%c%c%s", UI_CELLS_M_ATTR, UI_CELLS_ATTR(under ? UI_CELLS_A_UNDERLINE : 0), lc_fmt_name(m->fmt_cat, k));
+        ui_cells_marked(c, r, ix + 2, label, 0, (int)strlen(label), iw - 3);
+    }
+    ui_cells_pen(c, LC_ALERT, 0, 0);                             /* the close button: red on black, right 1 */
+    ui_cells_text(c, top + 1, left + w - 5, "[X]", 3);
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_hit_add(&lc_hits, LC_HIT_FMT, top, left, LC_FMT_H, w);
+    ui_hit_add(&lc_hits, LC_HIT_FMT_CAT, top + 2, left + 2, LC_FMT_CATS, catw - 2);
+    ui_hit_add(&lc_hits, LC_HIT_FMT_ITEM, top + 2, ix + 1, n - m->fmt_item_top < FMT_ITEM_ROWS ? n - m->fmt_item_top : FMT_ITEM_ROWS, iw - 2);
+    ui_hit_add(&lc_hits, LC_HIT_FMT_CLOSE, top + 1, left + w - 5, 1, 3);
 }
 
 static void draw_help(ui_cells *c, const lc_model *m)
@@ -1078,6 +1223,7 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
         ui_popup_draw(c, &m->ctx, LC_ACCENT, LC_INK, LC_ACCENT, LC_ALERT);
         ui_hit_add(&lc_hits, LC_HIT_POPUP, m->ctx.top, m->ctx.left, m->ctx.n + 2, m->ctx.w);
     }
+    if (m->fmt) draw_fmt(c, m);
     if (m->help) draw_help(c, m);
     if (m->view) draw_view(c, m);
     if (m->modal != LC_MODAL_NONE) draw_modal(c, m, cursor_row, cursor_col);
@@ -1103,7 +1249,7 @@ int lc_hit(int row, int col, int *index)
         for (k = 0; k < LC_MENUS; k++)
             if (col >= menu_col[k] && col < menu_col[k] + (int)strlen(lc_menu_label[k])) *index = k;
         break;
-    case LC_HIT_DROPDOWN: case LC_HIT_SIDEBAR: *index = dr; break;
+    case LC_HIT_DROPDOWN: case LC_HIT_SIDEBAR: case LC_HIT_FMT_CAT: case LC_HIT_FMT_ITEM: *index = dr; break;
     case LC_HIT_CHAT: *index = dr < CHAT_ROWS_MAX ? chat_row_line[dr] : -1; break;
     case LC_HIT_STATUS: *index = col; break;
     case -1: return LC_HIT_NONE;

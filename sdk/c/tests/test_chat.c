@@ -1039,6 +1039,31 @@ static void test_door_message_formatting(void)
     stop_stub();
 }
 
+/* C2/A12: the TS format picker (ui/format-picker.ts). Shift+Left selects in the input, F5 (or a selection held
+ * still for the TS 500 ms = FMT_WAIT_TICKS) opens the picker; Down Down Enter Enter picks Markdown > Bold and the
+ * selection is wrapped in place. F5 with no selection says how; a left press outside closes it. */
+static void test_door_format_picker(void)
+{
+    int rc;
+    start_stub();
+    rc = drive(KEYS("\r" "say hi" "\x81\x81" "\x85" "\x1b[B" "\x1b[B" "\r" "\r"), 0);
+    assert(rc == 0 && M.fmt == 0);
+    assert(strcmp(M.input, "say **hi**") == 0);                    /* Markdown > Bold wrapped the selection */
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "hi" "\x85"), 0);
+    assert(rc == 0 && M.fmt == 0 && has_line(0, "Select text first"));
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "hi" "\x81"), 800000);              /* no F5: the selection held still opens it from door_idle */
+    assert(rc == 0 && M.fmt == 1 && M.fmt_a == 1 && M.fmt_b == 2);
+    assert(strstr(screen_text, "Markdown") && strstr(screen_text, "Colors"));   /* the picker reached the wire */
+    fmt_click(LC_HIT_CHAT, 0, AE_MOUSE_LEFT);                      /* a left press outside closes it, as TS blur */
+    assert(M.fmt == 0 && strcmp(M.input, "hi") == 0);
+    stop_stub();
+    printf("  [OK] door: a selection opens the format picker (F5 or held still) and Markdown > Bold wraps it\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -1067,6 +1092,7 @@ int main(void)
     test_door_b4_ignore();
     test_door_b4_user_menu();
     test_door_message_formatting();
+    test_door_format_picker();
     test_door_no_config();
     test_config_save();
     test_register();

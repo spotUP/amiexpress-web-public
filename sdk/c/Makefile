@@ -123,9 +123,9 @@ build/test_ui_pages: src/ui_pages.c src/ui_profile.c tests/test_ui_pages.c inclu
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_pages.c src/ui_profile.c tests/test_ui_pages.c -o $@
 
-build/test_livechat_ui: src/ui_cells.c src/ui_ansi.c examples/livechat/livechat_ui.c tests/test_livechat_ui.c include/ui_cells.h examples/livechat/livechat_ui.h
+build/test_livechat_ui: src/ui_cells.c src/ui_ansi.c src/ui_theme.c examples/livechat/livechat_ui.c tests/test_livechat_ui.c include/ui_cells.h examples/livechat/livechat_ui.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -Iexamples/livechat src/ui_cells.c src/ui_ansi.c examples/livechat/livechat_ui.c tests/test_livechat_ui.c -o $@
+	$(CC) $(HOST_CFLAGS) -Iexamples/livechat src/ui_cells.c src/ui_ansi.c src/ui_theme.c examples/livechat/livechat_ui.c tests/test_livechat_ui.c -o $@
 
 build/test_ui_cells: src/ui_cells.c tests/test_ui_cells.c include/ui_cells.h include/ui_ansi.h
 	@mkdir -p build

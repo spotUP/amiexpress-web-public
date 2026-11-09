@@ -52,6 +52,7 @@
 #include "ui_input.h"
 #include "ui_key.h"
 #include "ui_screen.h"
+#include "ui_theme.h"
 #include "livechat_ui.h"
 
 /* Where the key file sits; the host test points it at a file of its own. */
@@ -1812,19 +1813,120 @@ static int idle_step(void)
     return 1;
 }
 
+static int is_enter(int key) { return key == UI_KEY_ENTER || key == '\r' || key == '\n'; }
+static int is_text(int key) { return (key >= 32 && key < 127) || (key >= 160 && key < 256); }
+
+/* ---- the format picker (TS ui/format-picker.ts, wired as server.ts:1792-1860 and 2872-2900) ---- */
+
+/* TS shows the picker 500 ms after the input's selection last changed. The door's clock is the
+   ticks door_idle sleeps, so the wait counts down in those (25 ticks at 1/50 s). */
+#define FMT_WAIT_TICKS 25
+static int fmt_wait;                     /* ticks left before a held selection opens the picker; 0 = none pending */
+static int fmt_seen_a = -1, fmt_seen_b = -1;   /* the selection the wait was started for */
+
+/** The input's selection as a..b (a < b). 0 when nothing is selected. */
+static int input_selection(int *a, int *b)
+{
+    if (M.input_anchor < 0 || M.input_anchor == M.input_cur) return 0;
+    *a = M.input_anchor < M.input_cur ? M.input_anchor : M.input_cur;
+    *b = M.input_anchor < M.input_cur ? M.input_cur : M.input_anchor;
+    return 1;
+}
+
+/** Open the picker over the selection. 0 when there is none to format. */
+static int fmt_show(void)
+{
+    int a, b;
+    if (!input_selection(&a, &b)) return 0;
+    lc_fmt_open(&M, a, b);
+    fmt_wait = 0;
+    return 1;
+}
+
+/** After a key: a selection that changed restarts the wait; no selection cancels it (TS select debounce). */
+static void fmt_watch(void)
+{
+    int a, b;
+    if (!input_selection(&a, &b)) { fmt_wait = 0; fmt_seen_a = fmt_seen_b = -1; return; }
+    if (a == fmt_seen_a && b == fmt_seen_b) return;
+    fmt_seen_a = a; fmt_seen_b = b;
+    fmt_wait = FMT_WAIT_TICKS;
+}
+
+/** One idle step of the wait. 1 when it ran out and the picker opened. */
+static int fmt_tick(int ticks)
+{
+    if (fmt_wait <= 0) return 0;
+    fmt_wait -= ticks;
+    if (fmt_wait > 0) return 0;
+    fmt_wait = 0;
+    if (M.fmt || M.focus != LC_FOCUS_INPUT || M.modal != LC_MODAL_NONE || M.help || M.view || M.ctx.open) return 0;
+    return fmt_show();
+}
+
+/** The picked item (TS onSelect): the selection is replaced by its wrapped form, the cursor goes after it. */
+static void fmt_apply(void)
+{
+    int cap = LC_INPUT_MAX < AE_CHAT_TEXT_MAX + 1 ? LC_INPUT_MAX : AE_CHAT_TEXT_MAX + 1;
+    int a = M.fmt_a, b = M.fmt_b, w;
+    char wrapped[LC_INPUT_MAX + 64];
+    M.fmt = 0;
+    if (a < 0 || b > M.input_len || a >= b) return;
+    w = lc_fmt_wrap(wrapped, (int)sizeof wrapped, M.fmt_cat, M.fmt_item, M.input + a, b - a, M.rgb);
+    if (w < 0 || M.input_len - (b - a) + w >= cap) { system_line("The formatted text does not fit the input"); return; }
+    memmove(M.input + a + w, M.input + b, (size_t)(M.input_len - b + 1));
+    memcpy(M.input + a, wrapped, (size_t)w);
+    M.input_len += w - (b - a);
+    M.input_cur = a + w;
+    M.input_anchor = -1;
+    fmt_wait = 0; fmt_seen_a = fmt_seen_b = -1;
+}
+
+/** The picker owns every key while it is shown (CategoryPicker's focus trap). */
+static void fmt_key(int key)
+{
+    if (key == UI_KEY_UP || key == 'k') lc_fmt_move(&M, -1);
+    else if (key == UI_KEY_DOWN || key == 'j') lc_fmt_move(&M, 1);
+    else if (key == 9 || key == UI_KEY_BACKTAB) M.fmt_pane = M.fmt_pane == LC_FMT_PANE_CAT ? LC_FMT_PANE_ITEM : LC_FMT_PANE_CAT;
+    else if (is_enter(key)) { if (M.fmt_pane == LC_FMT_PANE_CAT) M.fmt_pane = LC_FMT_PANE_ITEM; else fmt_apply(); }
+    else if (key == UI_KEY_ESC) M.fmt = 0;
+}
+
+/** A press while the picker is shown. Rows act as a blessed list does: the first click selects,
+    a click on the selected row enters it. A left press outside cancels; a right press does not. */
+static void fmt_click(int hit, int idx, int button)
+{
+    if (hit == LC_HIT_FMT_CLOSE) { M.fmt = 0; return; }
+    if (hit == LC_HIT_FMT_CAT && idx >= 0 && idx < LC_FMT_CATS) {
+        if (idx == M.fmt_cat) { M.fmt_pane = LC_FMT_PANE_ITEM; return; }
+        M.fmt_pane = LC_FMT_PANE_CAT;
+        lc_fmt_move(&M, idx - M.fmt_cat);
+        return;
+    }
+    if (hit == LC_HIT_FMT_ITEM && idx >= 0) {
+        int item = idx + M.fmt_item_top;
+        if (item >= lc_fmt_count(M.fmt_cat)) return;
+        if (M.fmt_pane == LC_FMT_PANE_ITEM && item == M.fmt_item) { fmt_apply(); return; }
+        M.fmt_pane = LC_FMT_PANE_ITEM;
+        lc_fmt_move(&M, item - M.fmt_item);
+        return;
+    }
+    if (hit == LC_HIT_FMT) return;
+    if (button == AE_MOUSE_LEFT) M.fmt = 0;
+}
+
 static void door_idle(void *ctx)
 {
+    int polled, opened;
     IGNORE(ctx);
-    if (idle_step()) {
-        do_poll();
-        present();
-    }
+    polled = idle_step();
+    if (polled) do_poll();
+    opened = fmt_tick(IDLE_SLEEP_TICKS);
+    if (polled || opened) present();
 }
 
 /* ---- keys --------------------------------------------------------------- */
 
-static int is_enter(int key) { return key == UI_KEY_ENTER || key == '\r' || key == '\n'; }
-static int is_text(int key) { return (key >= 32 && key < 127) || (key >= 160 && key < 256); }
 
 static void set_focus(int focus)
 {
@@ -1988,6 +2090,11 @@ static int handle_mouse(void)
         }
         if (e->kind != 'P') continue;          /* act on the press; releases and other motion carry nothing here */
         hit = lc_hit(row, col, &idx);
+        if (M.fmt) {                            /* the picker is on top: it takes the press, or a left press outside closes it */
+            int shown = hit == LC_HIT_FMT || hit == LC_HIT_FMT_CAT || hit == LC_HIT_FMT_ITEM || hit == LC_HIT_FMT_CLOSE;
+            fmt_click(hit, idx, e->button);
+            if (shown || e->button != AE_MOUSE_LEFT) continue;
+        }
         if (M.ctx.open) {
             int pick = ui_popup_click(&M.ctx, row, col);
             if (pick >= 0) ctx_run(M.ctx.items[pick]);
@@ -2009,7 +2116,11 @@ static int handle_mouse(void)
         }
         if (M.focus == LC_FOCUS_MENU) set_focus(LC_FOCUS_INPUT);
         if (hit == LC_HIT_STATUS) { M.sidebar_hidden = 0; switch_tab(idx >= 7); continue; }   /* TS mouse-handling: x < 7 channels, else users */
-        if (hit == LC_HIT_INPUT) { set_focus(LC_FOCUS_INPUT); continue; }
+        if (hit == LC_HIT_INPUT) {              /* TS: a right-click on the input with a selection shows the format picker */
+            set_focus(LC_FOCUS_INPUT);
+            if (e->button == AE_MOUSE_RIGHT) fmt_show();
+            continue;
+        }
         if (hit == LC_HIT_SCROLLBAR) {          /* press jumps the thumb under the pointer; held, it drags */
             int sc = lc_scroll_at(row);
             if (sc >= 0) M.scroll = sc;
@@ -2165,12 +2276,17 @@ static int handle_key(int key)
         if (is_text(key) && M.prompt_len + 1 < (int)sizeof M.prompt) { M.prompt[M.prompt_len++] = (char)key; M.prompt[M.prompt_len] = '\0'; }
         return 0;
     }
+    if (M.fmt) { fmt_key(key); return 0; }
     if (key == 17) { M.modal = LC_MODAL_QUIT; return 0; }
     if (M.focus == LC_FOCUS_INPUT && M.pick[0] == '\0' && slash_key(key)) return 0;
     if (key == UI_KEY_F1) { open_help(); return 0; }
     if (key == UI_KEY_F2) { M.sidebar_hidden = !M.sidebar_hidden; if (M.focus == LC_FOCUS_SIDEBAR) set_focus(LC_FOCUS_INPUT); return 0; }
     if (key == UI_KEY_F3) { switch_tab(!M.side_tab); return 0; }
     if (key == UI_KEY_F4) return 0;                          /* the emoji picker has no wire here */
+    if (key == UI_KEY_F5) {                                  /* TS server.ts: F5 formats the selection */
+        if (!fmt_show()) system_line("Select text first (Shift+Arrow keys), then press F5 for formatting");
+        return 0;
+    }
     if (key == 9) { cycle_focus(1); return 0; }
     if (key == UI_KEY_BACKTAB) { cycle_focus(-1); return 0; }
     if (key == UI_KEY_PGUP) { M.scroll += 10; if (M.scroll > LC_LINES * 4) M.scroll = LC_LINES * 4; return 0; }
@@ -2218,6 +2334,7 @@ static int handle_key(int key)
             && key == UI_KEY_UP && M.input_len == 0)
             lc_pick_start(&M);                  /* Up on an empty input picks a message (TS start({kind:'menu'})) */
         M.editing = ui_hist_editing(&hist) != 0;
+        fmt_watch();                            /* a selection held still opens the format picker (TS 500 ms debounce) */
     }
     return 0;
 }
@@ -2329,6 +2446,7 @@ int main(int argc, char **argv)
     idle_ticks = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
     room_id[0] = '\0'; room_name[0] = '\0'; room_topic[0] = '\0'; dm_thread[0] = '\0'; dm_peer[0] = '\0';
     nignored = 0; nmuted = 0;
+    fmt_wait = 0; fmt_seen_a = fmt_seen_b = -1;
 
     if (ae_start(node) != 0) return 20;
     if (ae_open_bbs(&session, session_storage, (long)sizeof(session_storage), node) != 0) {
@@ -2347,6 +2465,12 @@ int main(int argc, char **argv)
     lc_model_init(&M, screen.cols, screen.rows);
     copy(M.handle, sizeof M.handle, handle);
     M.node = node;
+    {   /* the caller's theme: the format picker's colours are its tokens, as T.* are in TS */
+        char theme_id[32];
+        theme_id[0] = '\0';
+        ae_user_theme(&session, theme_id, (int)sizeof theme_id);
+        M.rgb = ui_theme_by_id(theme_id)->rgb;
+    }
 
     keys.next = door_key;
     keys.pending = door_pending;

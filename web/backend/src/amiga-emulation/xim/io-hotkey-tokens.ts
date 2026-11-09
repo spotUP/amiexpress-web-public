@@ -41,6 +41,8 @@ export function processHotkeyToken(token: string, navKeys = false): string {
   // telnet forms (ESC[1~ Home, ESC[4~ End, ESC[7~ Home, ESC[8~ End).
   // Delete (ESC[3~) and Shift+Left/Right/Home/End (xterm ESC[1;2x) carry text
   // selection in an SDK line editor; like Home/End they reach SDK doors only.
+  // F5 (ESC[15~) is the LiveChat format picker key; F1-F4 need no entry, their
+  // ESC O P..S spelling is not a CSI token and passes through as plain bytes.
   const arrowMap: { [key: string]: number } = {
     '\x1b[A': ArrowKeyCodes.UPARROW,    // 4
     '\x1b[B': ArrowKeyCodes.DOWNARROW,  // 5
@@ -59,6 +61,7 @@ export function processHotkeyToken(token: string, navKeys = false): string {
     '\x1b[1;2C': NavigationKeyCodes.SHIFT_RIGHT,
     '\x1b[1;2H': NavigationKeyCodes.SHIFT_HOME,
     '\x1b[1;2F': NavigationKeyCodes.SHIFT_END,
+    '\x1b[15~': NavigationKeyCodes.F5,
   };
 
   const navCodes: number[] = Object.values(NavigationKeyCodes);
