@@ -1096,7 +1096,57 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId || '-'}, no
   // The maps are the board's answer to "who is on"; they are cleared here,
   // before anything that can be slow or throw. The bookkeeping below holds
   // its own `session` object and needs no map entry.
-  forgetSession(session, socketId, userId);
+  const releasedNode = forgetSession(session, socketId, userId);
+
+  // THE NODE FILES GO WITH THE NODE, in the same synchronous step.
+  //
+  // node<n>.user / node<n>.userkeys are the node's "who is here" on disk:
+  // WHO reads them, and so do the 68K doors - zOOsTAT (SysCmd S, run at
+  // auto-rejoin) does fopen("bbs:node1.user") and, finding none, freads
+  // through the NULL FILE* into ExecBase and runs away for ever (the
+  // 2026-11-09 blank-screen login hang: `Open failed for "bbs:node1.user"
+  // IoErr=205`, ExecBase 0x80000 -> 0x800a3 at pc=0x4bbc).
+  //
+  // They used to be deleted at the END of this function, after the callers
+  // log, the SAmiLog store, the logoff batches (whole 68K doors), the
+  // account save - seconds of awaits. forgetSession had already freed the
+  // node, so the next caller took it and wrote HIS node<n>.user, and this
+  // cleanup then deleted it under him. express.e cannot race itself: node n
+  // is one process, and its logoff runs clearUser() (express.e:2917-2925,
+  // called at 8182) BEFORE saveAccount (8207), doLogoffNotify (8211) and the
+  // LOGOFF syscommand (8222); the files are gone before any of the paperwork
+  // and nothing in it reads them. Same order here: the moment the maps say
+  // the node is free, its files are gone too, with no await in between for a
+  // new caller to slip into.
+  //
+  // ONLY IF THE NODE WAS STILL THIS SESSION'S. A kick (node-control-routes)
+  // frees the node and deletes its files itself; a new caller can take the
+  // node before the kicked session's socket finally closes. forgetSession
+  // knows whether it released this session's node, so it is the one answer:
+  // a session that no longer owns its node never touches that node's files.
+  // A session that never logged on wrote no node file and releases nothing.
+  if (releasedNode) {
+    const nodeId = session.nodeId || 0;
+    try {
+      nodeFileManager.deleteNodeFiles(nodeId);
+console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user?.username ?? '-'}`);
+    } catch (error) {
+console.error(`[LOGOFF] Error deleting node files:`, error);
+      SysopDebugUtil.debug(
+        socket,
+        session,
+        'Socket Connection',
+        `Failed to delete node files on logoff`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          nodeId,
+          username: session.user?.username
+        },
+        DebugSeverity.WARNING
+      );
+    }
+  }
+
   // The call is over: its resume token must never bring it back.
   revokeResumeToken(session);
   // Its node is free now; a full board waiting to reclaim it goes on (S11).
@@ -1214,8 +1264,9 @@ console.error('[CommandHistory] Error saving command history:', error);
     // new-since date after N, the conference's counters back into its record,
     // timeLastOn (read back at the next logon as the day the caller was last
     // on, 28508), every conference summed into the account, then
-    // saveAccount; the row follows the record. This is CRITICAL - must save
-    // user data before deleting node files.
+    // saveAccount; the row follows the record. It reads nothing from the
+    // node files, which are already gone (express.e: clearUser at 8182,
+    // saveAccount at 8207).
     if (session.user.slotNumber) {
       try {
         await saveAccountAtLogoff(session);
@@ -1238,27 +1289,8 @@ console.error('[LOGOFF] Error writing user disk files:', diskErr);
       }
     }
 
-    // CRITICAL: Delete node{n}.user files on logoff
-    // express.e deletes these when user logs off so WHO doesn't show logged-off users
-    const nodeId = session.nodeId || 0;
-    try {
-      nodeFileManager.deleteNodeFiles(nodeId);
-console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
-    } catch (error) {
-console.error(`[LOGOFF] Error deleting node files:`, error);
-      SysopDebugUtil.debug(
-        socket,
-        session,
-        'Socket Connection',
-        `Failed to delete node files on logoff`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-          nodeId,
-          username: session.user.username
-        },
-        DebugSeverity.WARNING
-      );
-    }
+    // The node files went with the node, above, before the first await:
+    // see "THE NODE FILES GO WITH THE NODE" at the top of this function.
 
     // SAmiLog update is handled by runLogoffBatches() which runs batch files
     // containing 'typescript:samilog' commands - no separate call needed
@@ -1295,12 +1327,17 @@ console.error(`[LOGOFF] Error deleting node files:`, error);
  * the account, so the disconnect cleanup could not call it while the account
  * was live elsewhere - and skipped it, leaving the ended node in `sessions`
  * for /health to list until the next restart.
+ *
+ * Returns true only when it released THIS session's node: false for a session
+ * that never logged on, and false when another session has taken the node
+ * since (a kick freed it). The caller deletes the node's files on that answer
+ * alone, so a late disconnect never deletes the next caller's node<n>.user.
  */
-export function forgetSession(session: BBSSession, socketId: string, userId: string): void {
+export function forgetSession(session: BBSSession, socketId: string, userId: string): boolean {
   if (!userId) {
 console.log(`[DISCONNECT] No userId, calling deleteSession for socket ${socketId}`);
     deleteSession(socketId);
-    return;
+    return false;
   }
   const nodeKey = session.nodeId ? session.nodeId.toString() : '';
   // The node is this session's unless another session has taken it since.
@@ -1331,6 +1368,7 @@ console.log(`[DISCONNECT] Sessions map now has ${sessions.size} entries`);
       }
     }
   }
+  return ownsNode;
 }
 
 export default registerSocketHandlers;
