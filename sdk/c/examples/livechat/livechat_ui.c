@@ -136,24 +136,333 @@ static void sb_run(sb *b, const char *s, int len)
 static void sb_str(sb *b, const char *s) { sb_run(b, s, (int)strlen(s)); }
 static void sb_fg(sb *b, int fg) { sb_ch(b, UI_CELLS_M_FG); sb_ch(b, fg); }
 
-/* "**x**" shows x in bold, the asterisks dropped; an unpaired "**" stays as typed. */
-static void sb_markdown(sb *b, const char *s)
+/* ---- Incoming message formatting: the TS render path, board/Doors/livechat/core/formatter.ts:12-13 (parseContent,
+ * then highlightMentions), utils/markdown.ts and utils/mentions.ts. The cell canvas paints no background per run, so a
+ * blessed "-bg" tag is read and dropped. ---- */
+
+typedef struct { int fg, bold, attr; } style;       /* fg -1: the pen's own colour */
+
+/* Brings the emitted style to `want` with the fewest markers (BASE returns fg, bold and attr to the pen's). */
+static void style_set(sb *b, style *have, const style *want)
 {
-    int bold = 0;
+    if (want->fg != have->fg) {
+        if (want->fg >= 0) sb_fg(b, want->fg);
+        else { sb_ch(b, UI_CELLS_M_BASE); have->bold = 0; have->attr = 0; }
+        have->fg = want->fg;
+    }
+    if (want->bold != have->bold) { sb_ch(b, want->bold ? UI_CELLS_M_BOLD : UI_CELLS_M_PLAIN); have->bold = want->bold; }
+    if (want->attr != have->attr) { sb_ch(b, UI_CELLS_M_ATTR); sb_ch(b, UI_CELLS_ATTR(want->attr)); have->attr = want->attr; }
+}
+
+static char self_nick[32];
+static struct { char name[LC_CUSTOM_EMOJI_LEN], ascii[LC_CUSTOM_EMOJI_TEXT]; } custom_emoji[LC_CUSTOM_EMOJI_MAX];
+static int ncustom_emoji;
+
+void lc_set_self(const char *handle)
+{
+    int n = 0;
+    while (handle[n] != '\0' && handle[n] != '@' && n < (int)sizeof self_nick - 1) { self_nick[n] = handle[n]; n++; }
+    self_nick[n] = '\0';
+}
+
+void lc_custom_emoji_clear(void) { ncustom_emoji = 0; }
+void lc_custom_emoji_add(const char *name, const char *ascii)
+{
+    /* TS utils/emojis.ts: a byte terminal sees `ascii`. An image emoji (no text form) is left as typed. */
+    if (ncustom_emoji >= LC_CUSTOM_EMOJI_MAX || name[0] == '\0' || ascii[0] == '\0') return;
+    sprintf(custom_emoji[ncustom_emoji].name, "%.*s", LC_CUSTOM_EMOJI_LEN - 1, name);
+    sprintf(custom_emoji[ncustom_emoji].ascii, "%.*s", LC_CUSTOM_EMOJI_TEXT - 1, ascii);
+    ncustom_emoji++;
+}
+
+/* TS utils/emojis.ts EMOJIS (code, display text). */
+static const struct { const char *code, *text; } emoji_table[] = {
+    { ":smile:", ":-)" },
+    { ":grin:", ":D" },
+    { ":joy:", "XD" },
+    { ":wink:", ";-)" },
+    { ":heart:", "<3" },
+    { ":sad:", ":-(" },
+    { ":cry:", ":'-(" },
+    { ":shock:", ":O" },
+    { ":angry:", ">:-(" },
+    { ":cool:", "B-)" },
+    { ":tongue:", ":P" },
+    { ":kiss:", ":-*" },
+    { ":blush:", ":-}" },
+    { ":confused:", ":-/" },
+    { ":neutral:", ":-|" },
+    { ":surprised:", ":o" },
+    { ":evil:", ">:-)" },
+    { ":angel:", "O:-)" },
+    { ":tableflip:", "(>_<)~~ |[__]|" },
+    { ":unflip:", "|---| (-_-)" },
+    { ":shrug:", "\\(o.O)/" },
+    { ":fight:", "(>_<)*" },
+    { ":dance:", "\\(^o^)/" },
+    { ":hug:", "(>^_^)<" },
+    { ":run:", "(>_>)===>" },
+    { ":wave:", "(^.^)/" },
+    { ":facepalm:", "(>_<;)" },
+    { ":thumbsup:", "(Y)" },
+    { ":thumbsdown:", "(N)" },
+    { ":fire:", "(*)" },
+    { ":star:", "*" },
+    { ":check:", "[v]" },
+    { ":x:", "[x]" },
+    { ":skull:", "8X" },
+    { ":music:", "~o~" },
+    { ":heart2:", "<3" },
+    { ":diamond:", "<>" },
+    { ":arrow:", "->" },
+    { ":warning:", "(!)" },
+    { ":lightning:", "/!\\" },
+    { ":amiga:", "[A]" },
+    { ":bbs:", "[BBS]" },
+    { ":door:", "[=>]" },
+};
+#define NEMOJI ((int)(sizeof emoji_table / sizeof emoji_table[0]))
+
+int lc_emoji_builtin(const char *code)
+{
+    int i;
+    for (i = 0; i < NEMOJI; i++) if (strcmp(code, emoji_table[i].code) == 0) return 1;
+    return 0;
+}
+
+static int is_word(int ch) { return (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_'; }
+static int lower(int ch);
+static int same_word(const char *a, const char *b, int len)
+{
+    int i;
+    for (i = 0; i < len; i++) if (lower((unsigned char)a[i]) != lower((unsigned char)b[i])) return 0;
+    return 1;
+}
+
+/* TS replaceEmojis: each known ":code:" becomes its text form, the built-ins first, then the board's custom
+ * emoji as their `ascii` (utils/emojis.ts getAllEmojis for a byte terminal). */
+static void expand_emoji(const char *in, char *out, int cap)
+{
+    int n = 0;
+    while (*in != '\0' && n + 1 < cap) {
+        if (*in == ':') {
+            int i;
+            for (i = 0; i < NEMOJI; i++) {
+                int cl = (int)strlen(emoji_table[i].code), tl = (int)strlen(emoji_table[i].text);
+                if (strncmp(in, emoji_table[i].code, (size_t)cl) == 0 && n + tl < cap) {
+                    memcpy(out + n, emoji_table[i].text, (size_t)tl);
+                    n += tl;
+                    in += cl;
+                    break;
+                }
+            }
+            if (i < NEMOJI) continue;
+            for (i = 0; i < ncustom_emoji; i++) {
+                int nl = (int)strlen(custom_emoji[i].name), tl = (int)strlen(custom_emoji[i].ascii);
+                if (strncmp(in + 1, custom_emoji[i].name, (size_t)nl) == 0 && in[1 + nl] == ':' && n + tl < cap) {
+                    memcpy(out + n, custom_emoji[i].ascii, (size_t)tl);
+                    n += tl;
+                    in += nl + 2;
+                    break;
+                }
+            }
+            if (i < ncustom_emoji) continue;
+        }
+        out[n++] = *in++;
+    }
+    out[n] = '\0';
+}
+
+/* blessed colour names (utils/markdown.ts VALID_COLORS) to xterm indices; "light" names are the bright half. */
+static int named_color(const char *s, int len)
+{
+    static const char *const names[] = { "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "gray" };
+    int i, light = 0;
+    if (len > 5 && strncmp(s, "light", 5) == 0) { light = 8; s += 5; len -= 5; }
+    for (i = 0; i < 9; i++)
+        if ((int)strlen(names[i]) == len && strncmp(names[i], s, (size_t)len) == 0)
+            return i == 8 ? (light ? 15 : 8) : i + light;
+    return -1;
+}
+
+static int hex_digit(int ch)
+{
+    return ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+}
+
+/* "#rrggbb" (the theme tokens the format picker writes, ui/format-picker.ts:21-28) to the nearest xterm cube colour. */
+static int hex_color(const char *s, int len)
+{
+    int v[3], i;
+    if (len != 7 || s[0] != '#') return -1;
+    for (i = 0; i < 3; i++) {
+        int hi = hex_digit(s[1 + 2 * i]), lo = hex_digit(s[2 + 2 * i]);
+        if (hi < 0 || lo < 0) return -1;
+        v[i] = hi * 16 + lo;
+        v[i] = v[i] < 48 ? 0 : v[i] < 115 ? 1 : (v[i] - 35) / 40;
+    }
+    return 16 + 36 * v[0] + 6 * v[1] + v[2];
+}
+
+/* "~rainbow~" ... "~/rainbow~": the animation tags (format-picker.ts:31-36). The door animates nothing, so a run takes
+ * the static look the TS picker previews for it (format-picker.ts:116-121). Returns the tag length, 0 when s is no tag. */
+static int effect_tag(const char *s, int *closing, int *fg, int *bold)
+{
+    static const struct { const char *name; int fg, bold; } fx[] = {
+        { "rainbow", LC_ACTIVITY, 1 }, { "pulse", LC_ACCENT, 1 }, { "sparkle", LC_ACTIVITY, 1 },
+        { "shake", LC_ALERT, 1 }, { "wave", LC_GREY, 1 }, { "gradient", LC_ACCENT, 0 } };
+    const char *p = s + 1, *end;
+    size_t i;
+    *closing = 0;
+    if (*p == '/') { *closing = 1; p++; }
+    end = strchr(p, '~');
+    if (end == 0) return 0;
+    for (i = 0; i < sizeof fx / sizeof fx[0]; i++) {
+        size_t nl = strlen(fx[i].name);
+        if (strncmp(p, fx[i].name, nl) == 0 && (p + nl == end || (!*closing && p[nl] == ' '))) {
+            *fg = fx[i].fg;
+            *bold = fx[i].bold;
+            return (int)(end - s) + 1;
+        }
+    }
+    return 0;
+}
+
+/* The opener at s of `len` characters has a partner when the closer follows with something between. */
+static int has_closer(const char *s, int len, const char *closer)
+{
+    const char *p = strstr(s + len + 1, closer);
+    return p != 0;
+}
+
+typedef struct { int bold, italic, under, strike, inv, tag_fg, eff_fg, eff_bold; } fmt;
+
+static void fmt_want(const fmt *f, style *want)
+{
+    want->bold = f->bold || f->eff_bold;
+    want->attr = (f->italic ? UI_CELLS_A_ITALIC : 0) | (f->under ? UI_CELLS_A_UNDERLINE : 0) | (f->inv ? UI_CELLS_A_REVERSE : 0);
+    want->fg = f->strike ? LC_DIM : f->tag_fg >= 0 ? f->tag_fg : f->eff_fg;
+}
+
+/* A word run in a one-off colour (mention, link), then back to the running style. */
+static void sb_spot(sb *b, style *have, const style *want, int fg, int rev, const char *s, int len)
+{
+    style spot = *want;
+    spot.fg = fg;
+    if (rev) spot.attr |= UI_CELLS_A_REVERSE;
+    style_set(b, have, &spot);
+    sb_run(b, s, len);
+}
+
+/* A {tag} at s (blessed syntax, utils/markdown.ts BLESSED_TAG_NAMES and parseColors). Returns the tag length when it is
+ * one that changes the style or is consumed, 0 when the brace stays as typed. *lit is set for {open} and {close}. */
+static int brace_tag(const char *s, fmt *f, int *lit)
+{
+    const char *e = strchr(s, '}');
+    int closing, nl, v;
+    const char *nm;
+    *lit = 0;
+    if (e == 0) return 0;
+    closing = s[1] == '/';
+    nm = s + 1 + closing;
+    nl = (int)(e - nm);
+    if (nl == 0) {
+        if (closing) { f->bold = f->italic = f->under = f->strike = f->inv = 0; f->tag_fg = -1; return (int)(e - s) + 1; }   /* {/} */
+        return 0;
+    }
+    if (nl == 4 && strncmp(nm, "bold", 4) == 0) { f->bold = !closing; return (int)(e - s) + 1; }
+    if (nl == 6 && strncmp(nm, "italic", 6) == 0) { f->italic = !closing; return (int)(e - s) + 1; }
+    if (nl == 9 && strncmp(nm, "underline", 9) == 0) { f->under = !closing; return (int)(e - s) + 1; }
+    if (nl == 7 && strncmp(nm, "inverse", 7) == 0) { f->inv = !closing; return (int)(e - s) + 1; }
+    if ((nl == 5 && strncmp(nm, "blink", 5) == 0) || (nl == 9 && strncmp(nm, "invisible", 9) == 0)) return (int)(e - s) + 1;
+    if (!closing && nl == 4 && strncmp(nm, "open", 4) == 0) { *lit = '{'; return (int)(e - s) + 1; }
+    if (!closing && nl == 5 && strncmp(nm, "close", 5) == 0) { *lit = '}'; return (int)(e - s) + 1; }
+    if (nl > 3 && nm[nl - 3] == '-' && (nm[nl - 2] == 'f' || nm[nl - 2] == 'b') && nm[nl - 1] == 'g') {
+        v = named_color(nm, nl - 3);
+        if (v < 0) v = hex_color(nm, nl - 3);
+        if (v < 0) return 0;
+        if (nm[nl - 2] == 'f') f->tag_fg = closing ? -1 : v;      /* -bg: read and dropped */
+        return (int)(e - s) + 1;
+    }
+    if (!closing && (v = named_color(nm, nl)) >= 0) {             /* {red}text{/red} */
+        char closer[16];
+        sprintf(closer, "{/%.*s}", nl, nm);
+        if (strstr(e + 1, closer) == 0) return 0;
+        f->tag_fg = v;
+        return (int)(e - s) + 1;
+    }
+    if (closing && named_color(nm, nl) >= 0) { f->tag_fg = -1; return (int)(e - s) + 1; }
+    if (!closing && nl > 3 && strncmp(nm, "bg:", 3) == 0 && named_color(nm + 3, nl - 3) >= 0 && strstr(e + 1, "{/bg}") != 0) return (int)(e - s) + 1;
+    if (closing && nl == 2 && strncmp(nm, "bg", 2) == 0) return (int)(e - s) + 1;
+    return 0;
+}
+
+/* One message body in the TS order: emoji codes, markdown (bold, italic, underline, code, strike), colour tags and
+ * effects, links, mentions. A marker with no partner stays as typed. */
+static void sb_markdown(sb *b, const char *text)
+{
+    char buf[LC_TEXT_MAX * 2];
+    const char *s = buf;
+    style have = { -1, 0, 0 }, want = { -1, 0, 0 };
+    fmt f = { 0, 0, 0, 0, 0, -1, -1, 0 };
+    expand_emoji(text, buf, (int)sizeof buf);
     while (*s != '\0') {
         const char *run = s;
-        while (*s != '\0' && *s != '*') s++;          /* plain text goes in as one run */
-        if (s > run) sb_run(b, run, (int)(s - run));
+        while (*s != '\0' && strchr("*_`~{@[:", *s) == 0) s++;     /* plain text goes in as one run */
+        if (s > run) { style_set(b, &have, &want); sb_run(b, run, (int)(s - run)); }
         if (*s == '\0') break;
-        if (s[1] == '*' && (bold || strstr(s + 2, "**") != 0)) {
-            sb_ch(b, bold ? UI_CELLS_M_PLAIN : UI_CELLS_M_BOLD);
-            bold = !bold;
-            s += 2;
+        if (s[0] == '*' && s[1] == '*' && (f.bold || has_closer(s, 2, "**"))) { f.bold = !f.bold; s += 2; }
+        else if (s[0] == '*' && s[1] != '*' && (f.italic || has_closer(s, 1, "*"))) { f.italic = !f.italic; s++; }
+        else if (s[0] == '_' && s[1] == '_' && (f.under || has_closer(s, 2, "__"))) { f.under = !f.under; s += 2; }
+        else if (s[0] == '~' && s[1] == '~' && (f.strike || has_closer(s, 2, "~~"))) { f.strike = !f.strike; s += 2; }
+        else if (s[0] == '`' && s[1] != '`' && s[1] != '\0' && strchr(s + 1, '`') != 0) {
+            const char *e = strchr(s + 1, '`');
+            style code = want;
+            code.attr |= UI_CELLS_A_REVERSE;
+            style_set(b, &have, &code);
+            sb_ch(b, ' ');
+            sb_run(b, s + 1, (int)(e - s - 1));
+            sb_ch(b, ' ');
+            s = e + 1;
             continue;
         }
-        sb_ch(b, '*');
-        s++;
+        else if (s[0] == '~' && effect_tag(s, &(int){0}, &(int){0}, &(int){0}) > 0) {
+            int closing, fg, bd, n = effect_tag(s, &closing, &fg, &bd);
+            f.eff_fg = closing ? -1 : fg;
+            f.eff_bold = closing ? 0 : bd;
+            s += n;
+        }
+        else if (s[0] == '{' && (brace_tag(s, &f, &(int){0}) > 0)) {
+            int lit, n = brace_tag(s, &f, &lit);
+            if (lit) { style_set(b, &have, &want); sb_ch(b, lit); }
+            s += n;
+        }
+        else if (s[0] == '@' && is_word(s[1])) {                    /* utils/mentions.ts highlightMentions */
+            const char *e = s + 1;
+            int len;
+            while (is_word(*e)) e++;
+            len = (int)(e - s - 1);
+            if ((int)strlen(self_nick) == len && same_word(s + 1, self_nick, len)) sb_spot(b, &have, &want, 3, 1, s, (int)(e - s));
+            else if ((len == 8 && same_word(s + 1, "everyone", 8)) || (len == 4 && same_word(s + 1, "here", 4))) sb_spot(b, &have, &want, LC_ALERT, 0, s, (int)(e - s));
+            else sb_spot(b, &have, &want, LC_ACCENT, 0, s, (int)(e - s));
+            s = e;
+            continue;
+        }
+        else if (s[0] == '[' && strchr(s, ']') != 0 && strchr(s, ']')[1] == '(' && strchr(strchr(s, ']'), ')') != 0 && strchr(s, ']') > s + 1) {
+            const char *rb = strchr(s, ']');                         /* [text](url): the text kept, the url dropped */
+            sb_spot(b, &have, &want, LC_ACCENT, 0, s, (int)(rb - s + 1));
+            s = strchr(rb, ')') + 1;
+            continue;
+        }
+        else {                                                       /* not a marker after all: as typed */
+            style_set(b, &have, &want);
+            sb_ch(b, *s);
+            s++;
+            continue;
+        }
+        fmt_want(&f, &want);
     }
+    style_set(b, &have, &(style){ -1, 0, 0 });                      /* the line's own tail starts from the pen */
 }
 
 const char *const lc_react_names[LC_REACT_KINDS] = { "+1", "-1", "heart", "fire", "laugh", "wow", "sad", "angry" };

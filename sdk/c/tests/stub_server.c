@@ -494,8 +494,15 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
             "[{\"id\":\"m1\",\"room\":\"Lobby\",\"user\":\"alice\",\"at\":1700000000,\"content\":\"hello there\"}]");
     } else if (strncmp(path, "/chat/v1/emoji", 14) == 0) {
         chat_note_write(st, path, body);
-        if (is_get) chat_reply(fd, 200, "application/json", "[{\"boardId\":\"b\",\"name\":\"party\",\"dataUrl\":\"data:image/png;base64,AA\"}]");
-        else { st->emoji_calls++; chat_reply(fd, 200, "application/json", "{\"ok\":true}"); }
+        if (is_get) chat_reply(fd, 200, "text/plain", "EMOJI|1|3|2\r\nparty|PARTY|\\o/\r\npic||\r\n");
+        else {
+            st->emoji_calls++;
+            if (strcmp(method, "PUT") == 0 && body != 0) {
+                strncpy(st->emoji_body, body, sizeof st->emoji_body - 1);
+                st->emoji_body[sizeof st->emoji_body - 1] = '\0';
+            }
+            chat_reply(fd, 200, "application/json", "{\"ok\":true}");
+        }
     } else if (strcmp(path, "/chat/v1/motd") == 0) {
         chat_note_write(st, path, body);
         if (is_get) chat_reply(fd, 200, "application/json", st->motd_set ? "{\"text\":\"Be nice\"}" : "{\"text\":\"\"}");

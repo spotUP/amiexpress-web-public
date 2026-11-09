@@ -639,7 +639,8 @@ static void test_door_phase_a(void)
     start_stub();
     drive(KEYS("\r" "/me waves\r" "/me\r" "/pin\r" "/pin m1\r" "/unpin m1\r" "/search a\r" "/search hello\r"
                "/motd\r" "/motd Be nice\r" "/motd\r" "/motd --clear\r"
-               "/customemoji list\r" "/customemoji remove party\r" "/customemoji add x y z\r"
+               "/customemoji\r" "/customemoji remove :party:\r" "/customemoji add :Zork: hi o/\r" "/customemoji add smile a b\r"
+               "/customemoji add x y\r" "/customemoji bogus\r"
                "/events\r" "/events logins\r" "/events off\r" "/events bogus\r" "/events on\r"
                "/delete\r" "/delete #nosuch\r" "/delete #Secret\r"), 0);
     assert(strcmp(st->last_message, "ACTION: * Tester waves") == 0);
@@ -650,8 +651,10 @@ static void test_door_phase_a(void)
     assert(has_line(0, "Found 1 result for \"hello\"") && has_line(0, "alice: hello there"));
     assert(has_line(0, "No MOTD set. Use /motd <text> to set, /motd --clear to clear."));
     assert(has_line(0, "[MOTD] Be nice"));
-    assert(has_line(0, "Custom emoji (1):") && has_line(0, ":party:"));
-    assert(st->emoji_calls >= 1);
+    assert(has_line(0, "  party  web PARTY  telnet \\o/") && !has_line(0, "  pic  web") && !has_line(0, "  EMOJI  web"));
+    assert(st->emoji_calls == 2 && strcmp(st->emoji_body, "{\"display\":\"hi\",\"ascii\":\"o/\"}") == 0);
+    assert(has_line(0, ":smile: is a built-in emoji.") && has_line(0, "Usage: /customemoji add <name> <display> <ascii>"));
+    assert(has_line(0, "Usage: /customemoji add <name> <display> <ascii> | remove <name> | list"));
     assert(has_line(0, "BBS Event Display Settings:") && has_line(0, "  User Logins/Logouts:     ON"));
     assert(has_line(0, "Login/logout events: OFF") && has_line(0, "All BBS events disabled"));
     assert(has_line(0, "Unknown event type: bogus") && has_line(0, "All BBS events enabled"));
@@ -952,6 +955,21 @@ static void test_door_slash_menu(void)
     printf("  [OK] door: the / menu lists matches, Tab and Enter fill, a full name runs, Esc hides\n");
 }
 
+/* Phase B: a message typed into the door comes back as an event and is drawn with its markdown, colour tag and
+ * mention. Reads the ANSI the door wrote: italic is SGR 3, the red tag foreground 1, the own-name mention reversed
+ * (SGR 7) yellow. The unit cases live in test_livechat_ui.c. */
+static void test_door_message_formatting(void)
+{
+    int rc;
+    start_stub();
+    rc = drive(KEYS("\r" "say *slant* {red-fg}hot{/} @Tester\r"), 0);
+    assert(rc == 0 && has_line("Tester", "*slant*"));              /* the event row carries the raw text */
+    assert(strstr(screen_text, "\033[0;3;49;38;5;255mslant") != 0);            /* *x*: italic in the text colour */
+    assert(strstr(screen_text, "\033[0;49;31mhot") != 0);                          /* {red-fg}: ANSI red, the tag eaten */
+    assert(strstr(screen_text, "\033[0;7;49;33m@Tester") != 0);   /* own name: reversed yellow */
+    stop_stub();
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -978,6 +996,7 @@ int main(void)
     test_door_b4_marks();
     test_door_b4_ignore();
     test_door_b4_user_menu();
+    test_door_message_formatting();
     test_door_no_config();
     test_config_save();
     test_register();

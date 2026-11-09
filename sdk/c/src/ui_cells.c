@@ -158,7 +158,7 @@ int ui_cells_marked_cols(const char *s)
 {
     int n = 0;
     for (; *s != '\0'; s++) {
-        if (*s == UI_CELLS_M_FG) { if (s[1] != '\0') s++; continue; }
+        if (*s == UI_CELLS_M_FG || *s == UI_CELLS_M_ATTR) { if (s[1] != '\0') s++; continue; }
         if (*s == UI_CELLS_M_BOLD || *s == UI_CELLS_M_PLAIN || *s == UI_CELLS_M_BASE) continue;
         if (*s == UI_CELLS_M_WIDE) { if (s[1] != '\0') { s++; n += 2; } continue; }
         n++;
@@ -168,19 +168,20 @@ int ui_cells_marked_cols(const char *s)
 
 int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int to, int max)
 {
-    int base_fg = c->fg, base_bold = c->bold, i, n = 0, k;
+    int base_fg = c->fg, base_bold = c->bold, base_attr = c->attr, i, n = 0, k;
     ui_cell pen, *line = row_at(c, row);
     set_cell(&pen, ' ', c->fg, c->bg, c->bold);
+    pen.flags |= (unsigned char)(c->attr << 4);
     for (i = 0; s[i] != '\0' && i < to; i++) {
         char ch = s[i];
-        if ((unsigned char)ch > (unsigned char)UI_CELLS_M_WIDE && i >= from && n < max) {   /* a run of plain characters: the hot path */
+        if ((unsigned char)ch > (unsigned char)UI_CELLS_M_ATTR && i >= from && n < max) {   /* a run of plain characters: the hot path */
             int room = line == 0 ? 0 : c->cols;
             k = col + n;
             do {
                 if ((unsigned)k < (unsigned)room) { line[k] = pen; line[k].ch = (unsigned char)ch; }
                 k++; n++; i++;
                 ch = s[i];
-            } while ((unsigned char)ch > (unsigned char)UI_CELLS_M_WIDE && i < to && n < max);
+            } while ((unsigned char)ch > (unsigned char)UI_CELLS_M_ATTR && i < to && n < max);
             i--;                                               /* the for step moves on to the character that ended the run */
             continue;
         }
@@ -196,11 +197,16 @@ int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int 
             n += 2;
             continue;
         }
+        if (ch == UI_CELLS_M_ATTR && s[i + 1] != '\0') {
+            c->attr = ((unsigned char)s[++i] - '@') & 7;
+            set_cell(&pen, ' ', c->fg, c->bg, c->bold); pen.flags |= (unsigned char)(c->attr << 4);
+            continue;
+        }
         if ((unsigned char)ch <= (unsigned char)UI_CELLS_M_BASE) {   /* a marker: 1..4 (is_marker) */
-            if (ch == UI_CELLS_M_FG && s[i + 1] != '\0') { c->fg = (unsigned char)s[++i]; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
-            if (ch == UI_CELLS_M_BOLD) { c->bold = 1; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
-            if (ch == UI_CELLS_M_PLAIN) { c->bold = 0; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
-            if (ch == UI_CELLS_M_BASE) { c->fg = base_fg; c->bold = base_bold; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+            if (ch == UI_CELLS_M_FG && s[i + 1] != '\0') { c->fg = (unsigned char)s[++i]; set_cell(&pen, ' ', c->fg, c->bg, c->bold); pen.flags |= (unsigned char)(c->attr << 4); continue; }
+            if (ch == UI_CELLS_M_BOLD) { c->bold = 1; set_cell(&pen, ' ', c->fg, c->bg, c->bold); pen.flags |= (unsigned char)(c->attr << 4); continue; }
+            if (ch == UI_CELLS_M_PLAIN) { c->bold = 0; set_cell(&pen, ' ', c->fg, c->bg, c->bold); pen.flags |= (unsigned char)(c->attr << 4); continue; }
+            if (ch == UI_CELLS_M_BASE) { c->fg = base_fg; c->bold = base_bold; c->attr = base_attr; set_cell(&pen, ' ', c->fg, c->bg, c->bold); pen.flags |= (unsigned char)(c->attr << 4); continue; }
         }
         if (i < from) continue;
         if (n >= max) break;
@@ -208,7 +214,7 @@ int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int 
         if (line != 0 && k >= 0 && k < c->cols) { line[k] = pen; line[k].ch = (unsigned char)ch; }
         n++;
     }
-    c->fg = base_fg; c->bold = base_bold;
+    c->fg = base_fg; c->bold = base_bold; c->attr = base_attr;
     return n;
 }
 
@@ -216,10 +222,11 @@ int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int 
  * the same fact). The typedef fails to compile if the header ever moves them. */
 typedef char ui_cells_markers_are_1_to_4[(UI_CELLS_M_FG == 1 && UI_CELLS_M_BOLD == 2 &&
                                           UI_CELLS_M_PLAIN == 3 && UI_CELLS_M_BASE == 4 &&
-                                          UI_CELLS_M_WIDE == 5) ? 1 : -1];
+                                          UI_CELLS_M_WIDE == 5 && UI_CELLS_M_ATTR == 6) ? 1 : -1];
 static int is_marker(const char *s, int i)
 {
-    return (unsigned char)s[i] >= (unsigned char)UI_CELLS_M_FG && (unsigned char)s[i] <= (unsigned char)UI_CELLS_M_BASE;
+    return ((unsigned char)s[i] >= (unsigned char)UI_CELLS_M_FG && (unsigned char)s[i] <= (unsigned char)UI_CELLS_M_BASE)
+        || s[i] == UI_CELLS_M_ATTR;
 }
 
 int ui_cells_wrap(const char *s, int width, int *starts, int *ends, int max)
@@ -237,7 +244,7 @@ int ui_cells_wrap(const char *s, int width, int *starts, int *ends, int max)
                 continue;
             }
             if (ch == '\0') break;
-            if (is_marker(s, j)) { j += (s[j] == UI_CELLS_M_FG && s[j + 1] != '\0') ? 2 : 1; continue; }
+            if (is_marker(s, j)) { j += ((s[j] == UI_CELLS_M_FG || s[j] == UI_CELLS_M_ATTR) && s[j + 1] != '\0') ? 2 : 1; continue; }
             if (s[j] == UI_CELLS_M_WIDE && s[j + 1] != '\0') {   /* a two-column glyph: never split */
                 if (cols + 2 > width && cols > 0) break;   /* alone on a too-narrow row it still goes */
                 cols += 2;
@@ -292,6 +299,9 @@ static void out_sgr(ansi_buf *b, const ui_cell *p)
 {
     out_str(b, "\033[0;");
     if (p->flags & UI_CELLS_BOLD) out_str(b, "1;");
+    if (p->flags & UI_CELLS_ITALIC) out_str(b, "3;");
+    if (p->flags & UI_CELLS_UNDERLINE) out_str(b, "4;");
+    if (p->flags & UI_CELLS_REVERSE) out_str(b, "7;");
     if (p->flags & UI_CELLS_BG_DEFAULT) out_str(b, "49");
     else out_colour(b, 40, 100, 48, p->bg);
     out_byte(b, ';');
@@ -299,11 +309,12 @@ static void out_sgr(ansi_buf *b, const ui_cell *p)
     out_byte(b, 'm');
 }
 
+#define STYLE_FLAGS (UI_CELLS_BOLD | UI_CELLS_BG_DEFAULT | UI_CELLS_UNDERLINE | UI_CELLS_ITALIC | UI_CELLS_REVERSE)
 static int same_style(const ui_cell *a, const ui_cell *b)
 {
     /* UI_CELLS_WIDE / _TAIL say what the cell holds, not how it is drawn. */
     return a->fg == b->fg && a->bg == b->bg
-        && (a->flags & (UI_CELLS_BOLD | UI_CELLS_BG_DEFAULT)) == (b->flags & (UI_CELLS_BOLD | UI_CELLS_BG_DEFAULT));
+        && (a->flags & STYLE_FLAGS) == (b->flags & STYLE_FLAGS);
 }
 
 /* A cell is four bytes; the flush compares it as one 32-bit word. memcpy keeps that legal for any

@@ -303,6 +303,23 @@ int main(void)
 
     ui_cells_close(&c);
 
+    /* Attribute marker (UI_CELLS_M_ATTR + arg): italic, underline, reverse as flags; BASE and the call's end restore. */
+    {
+        const char *s = "a\006" "B" "b" "\006@" "c";                    /* a, italic b, plain c */
+        CHECK(ui_cells_marked_cols(s) == 3, "attr marker and its arg take no columns");
+        CHECK(ui_cells_open(&c, 8, 1) == 0, "open attr");
+        ui_cells_marked(&c, 0, 0, s, 0, (int)strlen(s), 8);
+        CHECK(!(c.back[0].flags & UI_CELLS_ITALIC) && (c.back[1].flags & UI_CELLS_ITALIC) && !(c.back[2].flags & UI_CELLS_ITALIC), "italic only on b");
+        s = "\006" "G" "x" "\004" "y";                                   /* underline+italic+reverse, then BASE */
+        ui_cells_marked(&c, 0, 3, s, 0, (int)strlen(s), 5);
+        CHECK((c.back[3].flags & (UI_CELLS_UNDERLINE | UI_CELLS_ITALIC | UI_CELLS_REVERSE)) == (UI_CELLS_UNDERLINE | UI_CELLS_ITALIC | UI_CELLS_REVERSE), "all three attributes");
+        CHECK((c.back[4].flags & (UI_CELLS_UNDERLINE | UI_CELLS_ITALIC | UI_CELLS_REVERSE)) == 0, "BASE clears the attributes");
+        CHECK(c.attr == 0, "the pen's attributes restored at the end");
+        flush_into(&c, &b);
+        CHECK(strstr(wire, "3;") != 0 && strstr(wire, "4;") != 0 && strstr(wire, "7;") != 0, "SGR 3, 4 and 7 sent");
+        ui_cells_close(&c);
+    }
+
     /* Two-column glyphs (UI_CELLS_M_WIDE + id): one UTF-8 send, two columns, never torn. */
     {
         static const char *const glyphs[1] = { "\360\237\221\215" };   /* U+1F44D */

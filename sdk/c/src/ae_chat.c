@@ -371,7 +371,7 @@ static int starts_with(const char *s, const char *prefix)
  * row wherever a caller asks for fewer than four fields (a DM list showed a thread "1"). */
 static int has_header(const char *reply)
 {
-    static const char *const names[] = { "ROOMS|", "EVENTS|", "HISTORY|", "DM|", "WHO|", "MEMBERS|", "REACTIONS|", "PROFILE|", "IGNORES|" };
+    static const char *const names[] = { "ROOMS|", "EVENTS|", "HISTORY|", "DM|", "WHO|", "MEMBERS|", "REACTIONS|", "PROFILE|", "IGNORES|", "EMOJI|" };
     unsigned i;
     for (i = 0; i < sizeof names / sizeof names[0]; i++) if (starts_with(reply, names[i])) return 1;
     return 0;
@@ -894,11 +894,22 @@ int ae_chat_search(ae_chat *c, const char *query, const char *room, int limit)
 
 int ae_chat_emoji_list(ae_chat *c)
 {
-    static const char *const keys[] = { "name" };
-    int rc = call(c, "GET", AE_CHAT_BASE "/emoji", 0, 0);
+    return get_text(c, AE_CHAT_BASE "/emoji.txt");
+}
 
-    if (rc == AE_CHAT_OK) json_to_rows(c, keys, 1);
-    return rc;
+int ae_chat_emoji_add(ae_chat *c, const char *name, const char *display, const char *ascii)
+{
+    char path[PATH_MAX_LEN], body[BODY_MAX];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/emoji/", name, "");
+    long at;
+
+    if (rc != AE_CHAT_OK) return rc;
+    if (blank(display) || blank(ascii)) return AE_CHAT_ERR_ARGS;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "display", display);
+    at = put_field(body, sizeof body, at, "ascii", ascii);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "PUT", path, body, (unsigned long)at);
 }
 
 int ae_chat_emoji_remove(ae_chat *c, const char *name)

@@ -33,6 +33,7 @@
  * pins, search, themes) are drawn and do nothing: no fake data.
  */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1483,31 +1484,68 @@ static void motd_typed(const char *rest)
     then_poll(ae_chat_motd_set(&chat, strcmp(rest, "--clear") == 0 ? "" : rest));
 }
 
-/** /customemoji list | remove <name> | add: the hub stores a picture (data URL), not the TS display/ascii pair. */
+/** The hub's custom emoji, so a ":name:" in a message shows its ascii face (TS utils/emojis.ts). Best effort. */
+static void load_custom_emoji(void)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    lc_custom_emoji_clear();
+    if (ae_chat_emoji_list(&chat) != AE_CHAT_OK) return;
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 3) lc_custom_emoji_add(f[0], f[2]);
+}
+
+/** A typed emoji name as TS keeps it: the colons stripped, lower case. */
+static void emoji_name(const char *word, char *out, int cap)
+{
+    int n = 0;
+    if (*word == ':') word++;
+    while (*word && n < cap - 1) out[n++] = (char)tolower((unsigned char)*word++);
+    if (n > 0 && out[n - 1] == ':') n--;
+    out[n] = '\0';
+}
+
+/** /customemoji add <name> <display> <ascii> | remove <name> | list (TS commands/emoji.ts). A web caller
+ *  sees <display>, a telnet caller <ascii>; the hub refuses a non-sysop add or remove. */
 static void customemoji_typed(const char *rest)
 {
-    char sub[12], name[40], *f[AE_CHAT_ROW_FIELDS];
-    char t[LC_TEXT_MAX], names[24][40];
+    char sub[12], word[40], name[40], display[LC_CUSTOM_EMOJI_TEXT], ascii[LC_CUSTOM_EMOJI_TEXT];
+    char *f[AE_CHAT_ROW_FIELDS], t[LC_TEXT_MAX], code[44];
     int n = 0, i, rc;
     arg_word(rest, sub, sizeof sub);
     rest = after_word(rest);
-    if (strcmp(sub, "list") == 0) {
+    for (i = 0; sub[i]; i++) sub[i] = (char)tolower((unsigned char)sub[i]);
+    if (sub[0] == '\0' || strcmp(sub, "list") == 0) {
         rc = ae_chat_emoji_list(&chat);
         if (rc != AE_CHAT_OK) { show_error(rc); return; }
-        while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 1 && n < 24) { copy(names[n], sizeof names[0], f[0]); n++; }
-        if (n == 0) { system_line("No custom emoji yet."); return; }
-        sprintf(t, "Custom emoji (%d):", n);
-        system_line(t);
-        for (i = 0; i < n; i++) { sprintf(t, "  :%.36s:", names[i]); system_line(t); }
-    } else if (strcmp(sub, "remove") == 0) {
-        arg_word(rest, name, sizeof name);
-        if (name[0] == '\0') { usage("/customemoji remove <name>"); return; }
-        if (!is_sysop) { system_line("Only the sysop can add or remove custom emoji."); return; }
+        while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 3) {
+            if (f[1][0] == '\0' || f[2][0] == '\0') continue;   /* an image emoji: the web chat's own */
+            sprintf(t, "  %.32s  web %.32s  telnet %.32s", f[0], f[1], f[2]);
+            system_line(t);
+            n++;
+        }
+        if (n == 0) system_line("No custom emoji yet.");
+        return;
+    }
+    if (strcmp(sub, "add") != 0 && strcmp(sub, "remove") != 0) {
+        system_line("Usage: /customemoji add <name> <display> <ascii> | remove <name> | list");
+        return;
+    }
+    if (!is_sysop) { system_line("Only the sysop can add or remove custom emoji."); return; }
+    arg_word(rest, word, sizeof word);
+    rest = after_word(rest);
+    emoji_name(word, name, sizeof name);
+    if (strcmp(sub, "remove") == 0) {
+        if (name[0] == '\0') { system_line("Usage: /customemoji remove <name>"); return; }
         then_poll(ae_chat_emoji_remove(&chat, name));
-    } else if (strcmp(sub, "add") == 0) {
-        if (!is_sysop) { system_line("Only the sysop can add or remove custom emoji."); return; }
-        system_line("Custom emoji pictures are added in the web chat: this board stores a picture, not display text.");
-    } else usage("/customemoji add <name> <display> <ascii> | remove <name> | list");
+        load_custom_emoji();
+        return;
+    }
+    arg_word(rest, display, sizeof display);
+    rest = after_word(rest);
+    arg_word(rest, ascii, sizeof ascii);
+    sprintf(code, ":%.40s:", name);
+    if (name[0] == '\0' || display[0] == '\0' || ascii[0] == '\0') system_line("Usage: /customemoji add <name> <display> <ascii>");
+    else if (lc_emoji_builtin(code)) { sprintf(t, "%s is a built-in emoji.", code); system_line(t); }
+    else { then_poll(ae_chat_emoji_add(&chat, name, display, ascii)); load_custom_emoji(); }
 }
 
 /** The thread of a message as the text overlay (TS overlays/thread-view.ts). The first row is the parent. */
@@ -2188,6 +2226,7 @@ int main(int argc, char **argv)
     ui_screen_open_responsive(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
     ae_user_name(&session, handle, (int)sizeof(handle));
     if (handle[0] == '\0') strcpy(handle, "Anon");
+    lc_set_self(handle);                                      /* its @mentions are highlighted in incoming lines */
     if (ui_cells_open(&cells, screen.cols, screen.rows) != 0) {
         ui_screen_close(&screen);
         ae_shutdown();
@@ -2233,6 +2272,7 @@ int main(int argc, char **argv)
     keys.idle = door_idle;
     ae_bs_mouse(1);                                     /* "MOUSE ON B": clicks with their button, as menudoor */
 
+    load_custom_emoji();
     load_ignores();                                     /* the server keeps the list; hiding the lines is ours */
     /* As the TS door: list the rooms and walk into the first. */
     if (load_rooms() == AE_CHAT_OK) {

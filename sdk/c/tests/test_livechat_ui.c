@@ -162,6 +162,68 @@ static int react_rows_under_the_message(void)
     return fail;
 }
 
+/* Phase B: the TS markdown, colour tags, effects, mentions and emoji codes as cells. Draws the body of a live line
+ * and returns the column where `needle` starts (-1 when absent); *cell gets the first needle cell's style. */
+static int body_cell(const char *body, const char *needle, ui_cell *cell, char *shown, int shown_cap)
+{
+    lc_line l;
+    char out[LC_TEXT_MAX * 4];
+    ui_cells c;
+    int k, found = -1, n = 0;
+    memset(&l, 0, sizeof l);
+    l.kind = LC_LIVE;
+    strcpy(l.nick, "bob");
+    snprintf(l.text, sizeof l.text, "%s", body);
+    lc_line_marked(&l, out, sizeof out, 0, 200);
+    if (ui_cells_open(&c, 200, 4) != 0) return -1;
+    ui_cells_marked(&c, 0, 0, out, 0, (int)strlen(out), 200);
+    for (k = 0; k < 200 && n + 1 < shown_cap; k++) shown[n++] = c.back[k].ch == 0 ? ' ' : (char)c.back[k].ch;
+    shown[n] = '\0';
+    {
+        const char *at = strstr(shown, needle);
+        if (at != 0) { found = (int)(at - shown); *cell = c.back[found]; }
+    }
+    ui_cells_close(&c);
+    return found;
+}
+
+static int message_formatting(void)
+{
+    ui_cell cell;
+    char shown[256];
+    int fail = 0;
+#define CHECK_CELL(body, needle, want_ok, what) \
+    do { if (body_cell(body, needle, &cell, shown, sizeof shown) < 0 || !(want_ok)) { printf("format %s: '%s' in '%s'\n", what, needle, shown); fail = 1; } } while (0)
+    lc_set_self("Bob");
+    CHECK_CELL("a *it* b", "it", cell.flags & UI_CELLS_ITALIC, "italic");                      /* markdown.ts *x* */
+    CHECK_CELL("a __un__ b", "un", cell.flags & UI_CELLS_UNDERLINE, "underline");              /* __x__ */
+    CHECK_CELL("a ~~gone~~ b", "gone", cell.fg == LC_DIM, "strike");                            /* ~~x~~ dim */
+    CHECK_CELL("a `code` b", " code ", cell.flags & UI_CELLS_REVERSE, "code");                  /* inverse, padded */
+    CHECK_CELL("a **bd** b", "bd", cell.flags & UI_CELLS_BOLD, "bold");
+    CHECK_CELL("a *it* b", " b", !(cell.flags & (UI_CELLS_ITALIC | UI_CELLS_BOLD)), "italic ends");
+    CHECK_CELL("a {red-fg}hot{/} b", "hot", cell.fg == 1, "blessed red");
+    CHECK_CELL("a {#FF5C7A-fg}hot{/} b", "hot", cell.fg == 16 + 36 * 5 + 6 * 1 + 2, "hex colour");
+    CHECK_CELL("a {red}hot{/red} b", "hot", cell.fg == 1, "short colour tag");
+    CHECK_CELL("a {blue-bg}x{/blue-bg} b", "x", cell.fg != 4, "bg tag is not a foreground");
+    CHECK_CELL("a {unknown} b", "{unknown}", 1, "unknown braces stay");
+    CHECK_CELL("a ~rainbow~fx~/rainbow~ b", "fx", cell.fg == LC_ACTIVITY && (cell.flags & UI_CELLS_BOLD), "rainbow preview");
+    CHECK_CELL("a ~gradient from=red to=blue~gx~/gradient~ b", "gx", cell.fg == LC_ACCENT, "gradient preview");
+    CHECK_CELL("hi @Bob there", "@Bob", (cell.flags & UI_CELLS_REVERSE) && cell.fg == 3, "self mention");
+    CHECK_CELL("hi @alice there", "@alice", cell.fg == LC_ACCENT, "other mention");
+    CHECK_CELL("hi @everyone there", "@everyone", cell.fg == LC_ALERT, "everyone mention");
+    CHECK_CELL("see [docs](http://x.y/z) ok", "[docs]", cell.fg == LC_ACCENT, "link text");
+    CHECK_CELL("go :fire: now", "(*)", 1, "emoji code");                                      /* emojis.ts */
+    CHECK_CELL("go :thumbsup: now", "(Y)", 1, "emoji thumbsup");
+    lc_custom_emoji_clear();
+    lc_custom_emoji_add("party", "\\o/");
+    lc_custom_emoji_add("pic", "");                                                        /* image only: left as typed */
+    CHECK_CELL("go :party: now", "\\o/", 1, "custom emoji shows its ascii face");
+    CHECK_CELL("go :pic: now", ":pic:", 1, "image emoji stays as typed");
+    CHECK_CELL("go :nope: now", ":nope:", cell.fg != LC_ACTIVITY, "unknown emoji code");
+    lc_custom_emoji_clear();
+    return fail;
+}
+
 /* B3: /timestamps and /compact decide whether the time column is drawn. */
 static int stamps_follow_the_pref(void)
 {
@@ -324,7 +386,7 @@ static int slash_menu_rules(void)
 
 int main(void)
 {
-    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules();
+    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules() | message_formatting();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

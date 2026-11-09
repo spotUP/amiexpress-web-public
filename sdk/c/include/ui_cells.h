@@ -17,7 +17,8 @@
  * MARKED TEXT. ui_cells_marked and ui_cells_wrap take text with inline
  * style bytes: UI_CELLS_M_FG then one byte 1..255 sets the foreground,
  * UI_CELLS_M_BOLD and UI_CELLS_M_PLAIN switch bold, UI_CELLS_M_BASE returns
- * to the pen the call started with. Markers take no columns, except
+ * to the pen the call started with, UI_CELLS_M_ATTR then UI_CELLS_ATTR(bits) sets underline, italic and
+ * reverse (SGR 4, 3, 7). Markers take no columns, except
  * UI_CELLS_M_WIDE then one byte id 1..255: a two-column glyph, entry id-1 of
  * the table ui_cells_wide_table registered (an emoji, sent as its UTF-8
  * bytes). Only a door that told the board it writes UTF-8 registers one.
@@ -42,12 +43,20 @@ extern "C" {
 #define UI_CELLS_BG_DEFAULT 2
 #define UI_CELLS_WIDE 4        /* a two-column glyph: ch is its table id */
 #define UI_CELLS_WIDE_TAIL 8   /* the right half of the glyph to its left */
+#define UI_CELLS_UNDERLINE 16  /* SGR 4 */
+#define UI_CELLS_ITALIC 32     /* SGR 3 (the Amiga console draws it) */
+#define UI_CELLS_REVERSE 64    /* SGR 7: foreground and background swapped */
 
 #define UI_CELLS_M_FG    '\001'
 #define UI_CELLS_M_BOLD  '\002'
 #define UI_CELLS_M_PLAIN '\003'
 #define UI_CELLS_M_BASE  '\004'
 #define UI_CELLS_M_WIDE  '\005'
+#define UI_CELLS_M_ATTR  '\006'   /* then UI_CELLS_ATTR(bits): sets the attributes (replaces; UI_CELLS_ATTR(0) clears) */
+#define UI_CELLS_A_UNDERLINE 1
+#define UI_CELLS_A_ITALIC 2
+#define UI_CELLS_A_REVERSE 4
+#define UI_CELLS_ATTR(bits) ('@' + (bits))
 
 typedef struct {
     unsigned char ch;
@@ -62,6 +71,7 @@ typedef struct {
     ui_cell *front;        /* what was last sent */
     int full;              /* 1: the next flush resends every cell */
     int fg, bg, bold;      /* the pen */
+    int attr;              /* the pen's UI_CELLS_A_* bits; only ui_cells_marked sets them, and restores them */
     long sent;             /* cells sent by the last flush */
     const char *const *wide; /* UI_CELLS_M_WIDE glyphs, id 1 = wide[0]; 0: none */
     int nwide;

@@ -208,8 +208,11 @@ int ae_chat_pin(ae_chat *c, const char *room, const char *msg_id, int pin);
 /** GET /search?q=&room=&limit= (room may be NULL). Rows: id, roomName, user, at, content. */
 int ae_chat_search(ae_chat *c, const char *query, const char *room, int limit);
 
-/** GET /emoji. Rows: name only (the data URLs do not fit the reply buffer). */
+/** GET /emoji.txt. Rows: name, display, ascii (an image emoji has the two text fields empty). */
 int ae_chat_emoji_list(ae_chat *c);
+
+/** PUT /emoji/:name {display, ascii}. Sysop only; each text 1 to 32 bytes without '|' or line breaks. */
+int ae_chat_emoji_add(ae_chat *c, const char *name, const char *display, const char *ascii);
 
 /** DELETE /emoji/:name. Sysop only. */
 int ae_chat_emoji_remove(ae_chat *c, const char *name);

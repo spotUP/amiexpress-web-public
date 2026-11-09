@@ -166,6 +166,15 @@ extern unsigned long lc_chat_rewraps;
 int lc_sidebar_width(const lc_model *m);
 int lc_text_rows(const lc_model *m);
 int lc_nick_color(const char *nick);
+/* Incoming-message formatting state: the caller's handle (its @mentions are highlighted) and the hub's custom emoji names. */
+#define LC_CUSTOM_EMOJI_MAX 64
+#define LC_CUSTOM_EMOJI_LEN 24
+#define LC_CUSTOM_EMOJI_TEXT 33   /* the hub's emojiMaxBytes (32) and the NUL */
+void lc_set_self(const char *handle);
+void lc_custom_emoji_clear(void);
+void lc_custom_emoji_add(const char *name, const char *ascii);
+/** 1 when `code` (":smile:") is one of the built-in emoji (TS EMOJIS). */
+int lc_emoji_builtin(const char *code);
 /** The reactions the React picker offers, in its order: the server's names (TS REACTION_EMOJIS). */
 #define LC_REACT_KINDS 8
 extern const char *const lc_react_names[LC_REACT_KINDS];
