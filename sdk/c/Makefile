@@ -63,6 +63,10 @@ all: test
 # The menu-door tests feed a key file as stdin. A hang there blocks `make test`
 # for ever, so each runs under a 20 s ceiling where the host has timeout(1).
 DOOR_TEST_GUARD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null) $(if $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null),20,)
+# test_chat drives the real door loop against a stub hub with a paced key feeder (0.4 s after every Enter, 0.8 s per
+# byte in the held-still selection test, one real-time pause per scripted step): ~32 s of wall clock and well under 1 s
+# of CPU, by design. The guard only catches a hang, so it gets 90 s.
+DOOR_CHAT_GUARD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null) $(if $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null),90,)
 
 test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_cells build/test_ui_pages build/test_ae_http build/test_ae_net_tls build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_ae_field_shape build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_ae_usernote build/test_ae_chatprefs build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_board_screen_save build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins build/test_chat build/test_livechat_ui
 	./build/test_ae_host
@@ -103,7 +107,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	$(DOOR_TEST_GUARD) ./build/test_menudoor_model
 	$(DOOR_TEST_GUARD) ./build/test_mainmenu
 	$(DOOR_TEST_GUARD) ./build/test_bulletins
-	$(DOOR_TEST_GUARD) ./build/test_chat
+	$(DOOR_CHAT_GUARD) ./build/test_chat
 	./build/test_ui_cells
 	./build/test_livechat_ui
 

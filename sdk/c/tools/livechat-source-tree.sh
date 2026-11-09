@@ -26,7 +26,7 @@ ui_cells.h ui_chrome.h ui_input.h ui_key.h ui_list.h ui_profile.h ui_screen.h
 ui_theme.h"
 DOOR="livechat.c livechat_ui.c livechat_ui.h"
 TESTS="test_chat.c test_livechat_ui.c stub_server.c stub_server.h"
-FIXTURES="lc68-ts-main-80x25.grid lc68-ts-main-40x25.grid lc68-ts-main-80x15.grid"
+FIXTURES="lc68-ts-main-80x25.grid lc68-ts-main-40x25.grid lc68-ts-main-80x15.grid lc68-ts-colour-map.txt"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/src" "$OUT/include" "$OUT/examples/livechat" "$OUT/tests/fixtures"
