@@ -1335,6 +1335,45 @@ static void draw_modal(ui_cells *c, const lc_model *m, int *cr, int *cc)
     }
 }
 
+/** The search overlay: TS ui/search-overlay.ts on the SDK SearchModal (search-modal.ts). A 90% box titled
+    "Message Search"; at row 1 the 3-row Query field and, from the middle, the "Username (optional)" field (the
+    focused one on the blue ground); from row 5 the Results list, its selected row on blue; the help line last. */
+static void draw_search(ui_cells *c, const lc_model *m, int *cr, int *cc)
+{
+    int h = c->rows * 9 / 10, w = c->cols * 9 / 10, top, left, fw, ux, rt, rh, rw, i;
+    static const char *const help = "Enter: Search | Tab: Next field | Esc: Close";
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_modal(c, h, w, LC_ACCENT, "Message Search", LC_INK, &top, &left);
+    ui_hit_add(&lc_hits, LC_HIT_SEARCH, top, left, h, w);
+    fw = (w - 4) / 2 - 1;
+    ux = left + w / 2;
+    for (i = 0; i < 2; i++) {
+        int x = i == 0 ? left + 2 : ux;
+        const char *text = i == 0 ? m->search_q : m->search_user;
+        int focus = m->search_field == i;
+        ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+        ui_cells_box(c, top + 1, x, 3, fw, LC_INK, i == 0 ? "Query" : "Username (optional)", LC_INK);
+        ui_cells_pen(c, LC_INK, focus ? LC_LABEL_BG : UI_CELLS_DEFAULT, 0);
+        ui_cells_fill(c, top + 2, x + 1, 1, fw - 2, ' ');
+        ui_cells_text(c, top + 2, x + 1, text, fw - 3);
+        ui_hit_add(&lc_hits, i == 0 ? LC_HIT_SEARCH_Q : LC_HIT_SEARCH_USER, top + 1, x, 3, fw);
+        if (focus) { *cr = top + 2; *cc = x + 1 + (int)strlen(text); }
+    }
+    rt = top + 5; rh = h - 8; rw = w - 4;
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_box(c, rt, left + 2, rh, rw, LC_INK, "Results", LC_INK);
+    for (i = 0; i < rh - 2 && m->search_top + i < m->search_n; i++) {
+        int k = m->search_top + i, sel = k == m->search_sel;
+        ui_cells_pen(c, LC_INK, sel ? LC_LABEL_BG : UI_CELLS_DEFAULT, 0);
+        if (sel) ui_cells_fill(c, rt + 1 + i, left + 3, 1, rw - 2, ' ');
+        ui_cells_text(c, rt + 1 + i, left + 3, m->search_rows[k], rw - 2);
+    }
+    ui_hit_add(&lc_hits, LC_HIT_SEARCH_ROW, rt + 1, left + 3, rh - 2, rw - 2);
+    ui_cells_pen(c, LC_ACCENT, UI_CELLS_DEFAULT, 0);
+    ui_cells_text(c, top + h - 2, left + 2, help, w - 4);
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+}
+
 void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
 {
     int W = c->cols, H = c->rows, sw = lc_sidebar_width(m), h = H - 5;
@@ -1371,6 +1410,7 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
     if (m->fmt) draw_fmt(c, m);
     if (m->help) draw_help(c, m);
     if (m->view) draw_view(c, m);
+    if (m->search) draw_search(c, m, cursor_row, cursor_col);
     if (m->modal != LC_MODAL_NONE) draw_modal(c, m, cursor_row, cursor_col);
 }
 
@@ -1394,7 +1434,7 @@ int lc_hit(int row, int col, int *index)
         for (k = 0; k < LC_MENUS; k++)
             if (col >= menu_col[k] && col < menu_col[k] + (int)strlen(lc_menu_label[k])) *index = k;
         break;
-    case LC_HIT_DROPDOWN: case LC_HIT_SIDEBAR: case LC_HIT_FMT_CAT: case LC_HIT_FMT_ITEM: *index = dr; break;
+    case LC_HIT_DROPDOWN: case LC_HIT_SIDEBAR: case LC_HIT_FMT_CAT: case LC_HIT_FMT_ITEM: case LC_HIT_SEARCH_ROW: *index = dr; break;
     case LC_HIT_CHAT: *index = dr < CHAT_ROWS_MAX ? chat_row_line[dr] : -1; break;
     case LC_HIT_STATUS: *index = col; break;
     case -1: return LC_HIT_NONE;

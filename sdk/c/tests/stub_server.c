@@ -486,7 +486,7 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (strncmp(path, "/chat/v1/rooms/", 15) == 0 && strstr(path, "/pins") != 0) {      /* Phase A */
         chat_note_write(st, path, body);
         if (is_get) chat_reply(fd, 200, "application/json",
-            "[{\"messageId\":\"m1\",\"user\":\"alice\",\"content\":\"hello there\",\"pinnedBy\":\"Tester\",\"at\":1700000000}]");
+            "[{\"messageId\":\"m1\",\"user\":\"alice\",\"content\":\"hello there\",\"pinnedBy\":\"Tester\",\"at\":1700000000,\"messageAt\":1699990000}]");
         else { st->pin_calls++; chat_reply(fd, is_post ? 201 : 200, "application/json", "{\"ok\":true}"); }
     } else if (is_get && strncmp(path, "/chat/v1/search", 15) == 0) {
         chat_note_write(st, path, body);

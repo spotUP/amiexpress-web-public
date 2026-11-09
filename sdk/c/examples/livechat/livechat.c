@@ -1641,20 +1641,21 @@ static void datetime_of(char *out, const char *epoch)
             tm->tm_hour % 12 == 0 ? 12 : tm->tm_hour % 12, tm->tm_min % 60, tm->tm_sec % 61, tm->tm_hour < 12 ? "AM" : "PM");
 }
 
-/** /pinned (alias pins): TS pinned-panel.ts as the text overlay. The hub's pin row has no message-sent time, so the
-    "Sent:" line of the TS panel is left out; the pinned-by line is the TS one. */
+/** /pinned (alias pins): TS ui/pinned-panel.ts as the text overlay: per pin "N. user: message", the "Sent:" time of
+    the message (the hub's messageAt) and "Pinned by X on <date>". */
 static void pinned_typed(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
-    char t[LC_VIEW_COL + 80], d[40], rows[8][LC_VIEW_COL], by[8][80];
-    int n = 0, i, rc;
+    char t[LC_VIEW_COL + 80], d[40], rows[8][LC_VIEW_COL], by[8][80], sent[8][40];
+    int n = 0, i, rc, k;
     if (room_id[0] == '\0') { system_line("Join a room first."); return; }
     rc = ae_chat_pins(&chat, room_id);
     if (rc != AE_CHAT_OK) { show_error(rc); return; }
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && n < 8) {
+    while ((k = ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS)) >= 5 && n < 8) {
         sprintf(rows[n], "%.24s: %.60s", f[1], f[2]);
         datetime_of(d, f[4]);
         sprintf(by[n], "%.20s on %.30s", f[3], d);
+        datetime_of(sent[n], k >= 6 ? f[5] : "");
         n++;
     }
     view_open("Pinned Messages");
@@ -1666,6 +1667,8 @@ static void pinned_typed(void)
         for (i = 0; i < n; i++) {
             sprintf(t, "%d. %.90s", i + 1, rows[i]);
             view_add(t);
+            sprintf(t, "   Sent: %s", sent[i]);
+            view_add(t);
             sprintf(t, "   Pinned by %s", by[i]);
             view_add(t);
             view_add("");
@@ -1676,35 +1679,57 @@ static void pinned_typed(void)
     view_add("Press ESC to close");
 }
 
-/** /search [query] (alias find): TS ui/search-overlay.ts. The results list is the text overlay (rows "N. user @ date:
-    message", or "No results found"), then the system line server.ts prints. No query opens the overlay empty. */
-static void search_typed(const char *rest)
+/** TS ui/search-overlay.ts: /search, /find, Ctrl+F and the menu's "Search (Ctrl+F)" all open the modal empty (TS
+    ignores a typed query). Query and Username (optional) fields, a Results list, Tab between the two fields. */
+static int is_enter(int key);
+static int is_text(int key);
+
+static void search_open(void)
+{
+    M.search = 1;
+    M.search_field = 0;
+    M.search_q[0] = M.search_user[0] = '\0';
+    M.search_n = M.search_sel = M.search_top = 0;
+}
+
+/** Enter in the Query field: TS onSearch(query, username). Under 2 characters is the TS system line; otherwise the
+    hub search fills the Results list ("N. user @ date: message") and server.ts prints "Found N results for ...". */
+static void search_run(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
-    char t[LC_VIEW_COL + 120], d[40], hits[10][LC_VIEW_COL];
-    int n = 0, i, rc;
-    if (*rest == '\0') {
-        view_open("Message Search");
-        view_add("Type /search <query> to search this room.");
-        view_add("");
-        view_add("Press ESC to close");
-        return;
-    }
-    if (strlen(rest) < 2) { system_line("Search query must be at least 2 characters"); return; }
-    rc = ae_chat_search(&chat, rest, room_id[0] != '\0' ? room_id : 0, 10);
+    char t[LC_VIEW_COL + 120], d[40];
+    int rc;
+    if (strlen(M.search_q) < 2) { system_line("Search query must be at least 2 characters"); return; }
+    rc = ae_chat_search(&chat, M.search_q, room_id[0] != '\0' ? room_id : 0,
+                        M.search_user[0] != '\0' ? M.search_user : 0, LC_SEARCH_MAX);
     if (rc != AE_CHAT_OK) { show_error(rc); return; }
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && n < 10) {
+    M.search_n = M.search_sel = M.search_top = 0;
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && M.search_n < LC_SEARCH_MAX) {
         datetime_of(d, f[3]);
-        sprintf(hits[n], "%.20s @ %.24s: %.40s", f[2], d, f[4]);
-        n++;
+        sprintf(t, "%d. %.20s @ %.24s: %.60s", M.search_n + 1, f[2], d, f[4]);
+        copy(M.search_rows[M.search_n++], LC_VIEW_COL, t);
     }
-    view_open("Message Search");
-    if (n == 0) view_add("No results found");
-    for (i = 0; i < n; i++) { sprintf(t, "%d. %.94s", i + 1, hits[i]); view_add(t); }
-    view_add("");
-    view_add("Press ESC to close");
-    sprintf(t, "Found %d results for \"%.100s\"", n, rest);
+    sprintf(t, "Found %d results for \"%.100s\"", M.search_n, M.search_q);
     system_line(t);
+}
+
+/** Keys while the search modal is up: Esc closes, Tab/Shift+Tab switch field, Enter in Query searches, arrows move
+    the Results selection, text and Backspace edit the focused field. */
+static void search_key(int key)
+{
+    char *field = M.search_field == 0 ? M.search_q : M.search_user;
+    int cap = M.search_field == 0 ? (int)sizeof M.search_q : (int)sizeof M.search_user;
+    int len = (int)strlen(field);
+    if (key == UI_KEY_ESC || key == 27) M.search = 0;
+    else if (key == 9 || key == UI_KEY_BACKTAB) M.search_field = !M.search_field;
+    else if (is_enter(key)) { if (M.search_field == 0) search_run(); }
+    else if (key == UI_KEY_DOWN && M.search_sel < M.search_n - 1) M.search_sel++;
+    else if (key == UI_KEY_UP && M.search_sel > 0) M.search_sel--;
+    else if (key == UI_KEY_PGDN) { M.search_sel += 10; if (M.search_sel > M.search_n - 1) M.search_sel = M.search_n > 0 ? M.search_n - 1 : 0; }
+    else if (key == UI_KEY_PGUP) { M.search_sel -= 10; if (M.search_sel < 0) M.search_sel = 0; }
+    else if ((key == 8 || key == 127) && len > 0) field[len - 1] = '\0';
+    else if (is_text(key) && len + 1 < cap) { field[len] = (char)key; field[len + 1] = '\0'; }
+    if (M.search_sel < M.search_top) M.search_top = M.search_sel;
 }
 
 /** /motd [text|--clear]: the room's message of the day (TS commands/mode.ts + input-submit-handler).
@@ -1938,7 +1963,7 @@ static int run_command(const char *line)
     if (strcmp(cmd, "events") == 0) { events_typed(rest); return 0; }
     if (strcmp(cmd, "pin") == 0 || strcmp(cmd, "unpin") == 0) { pin_typed(cmd[0] == 'p', rest); return 0; }
     if (is_cmd(cmd, "pinned", "pins")) { pinned_typed(); return 0; }
-    if (is_cmd(cmd, "search", "find")) { search_typed(rest); return 0; }
+    if (is_cmd(cmd, "search", "find")) { search_open(); return 0; }
     if (strcmp(cmd, "motd") == 0) { motd_typed(rest); return 0; }
     if (strcmp(cmd, "emoji") == 0 && *rest == '\0') { emoji_show(); return 0; }   /* commands/emoji.ts: no query opens the picker */
     if (strcmp(cmd, "emoji") == 0) { emoji_search_typed(rest); return 0; }
@@ -2321,6 +2346,12 @@ static int handle_mouse(void)
             continue;
         }
         if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) M.modal = LC_MODAL_NONE; continue; }
+        if (M.search) {                         /* TS: a click on a field focuses it; a click on a result selects it */
+            if (hit == LC_HIT_SEARCH_Q) M.search_field = 0;
+            else if (hit == LC_HIT_SEARCH_USER) M.search_field = 1;
+            else if (hit == LC_HIT_SEARCH_ROW && idx >= 0 && idx < M.search_n) M.search_sel = idx;
+            continue;
+        }
         if (M.modal != LC_MODAL_NONE || M.help || M.view) continue;
         if (hit == LC_HIT_MENU && idx >= 0) { M.menu = idx; M.menu_sel = 0; M.focus = LC_FOCUS_MENU; continue; }
         if (hit == LC_HIT_DROPDOWN && M.menu >= 0 && idx >= 0 && idx < lc_menu_count[M.menu]) {
@@ -2368,7 +2399,7 @@ static int menu_pick(int menu, int item)
     else if (strcmp(it, "About") == 0) message_modal("LIVECHAT68", "Federated chat for AmiExpress boards");
     else if (strncmp(it, "Quit", 4) == 0) M.modal = LC_MODAL_QUIT;
     else if (strncmp(it, "Pins", 4) == 0) run_command("/pinned");
-    else if (strncmp(it, "Search", 6) == 0) input_set("/search ");
+    else if (strncmp(it, "Search", 6) == 0) search_open();
     else if (strncmp(it, "Threads", 7) == 0) {
         const lc_line *l = room_last();
         if (l != 0 && l->id[0] != '\0') thread_view(l->id);
@@ -2472,6 +2503,7 @@ static int handle_key(int key)
         else M.view = 0;
         return 0;
     }
+    if (M.search) { search_key(key); return 0; }
     if (M.modal == LC_MODAL_MESSAGE) { M.modal = LC_MODAL_NONE; return 0; }
     if (M.modal == LC_MODAL_QUIT) {
         if (key == 'y' || key == 'Y' || is_enter(key)) return 1;
@@ -2494,6 +2526,7 @@ static int handle_key(int key)
     }
     if (M.fmt) { fmt_key(key); return 0; }
     if (key == 17) { M.modal = LC_MODAL_QUIT; return 0; }
+    if (key == 6) { search_open(); return 0; }     /* TS: Ctrl+F opens the message search */
     if (M.focus == LC_FOCUS_INPUT && M.pick[0] == '\0' && slash_key(key)) return 0;
     if (key == UI_KEY_F1) { open_help(); return 0; }
     if (key == UI_KEY_F2) { M.sidebar_hidden = !M.sidebar_hidden; if (M.focus == LC_FOCUS_SIDEBAR) set_focus(LC_FOCUS_INPUT); return 0; }

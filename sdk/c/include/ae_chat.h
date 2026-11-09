@@ -204,14 +204,16 @@ int ae_chat_ignores(ae_chat *c);
 /** add: POST /ignores {user}; else DELETE /ignores/:user. `user` is "handle@BOARD". */
 int ae_chat_ignore(ae_chat *c, const char *user, int add);
 
-/** GET /rooms/:id/pins (JSON on the wire, read here as rows): messageId, user, content, pinnedBy, at. */
+/** GET /rooms/:id/pins (JSON on the wire, read here as rows): messageId, user, content, pinnedBy, at (pin time),
+ *  messageAt (time the message was posted). */
 int ae_chat_pins(ae_chat *c, const char *room);
 
 /** pin: POST /rooms/:id/pins {messageId}; else DELETE /rooms/:id/pins/:messageId. Needs room op. */
 int ae_chat_pin(ae_chat *c, const char *room, const char *msg_id, int pin);
 
-/** GET /search?q=&room=&limit= (room may be NULL). Rows: id, roomName, user, at, content. */
-int ae_chat_search(ae_chat *c, const char *query, const char *room, int limit);
+/** GET /search?q=&room=&user=&limit= (room and user may be NULL). `user` is a bare
+ *  handle or "handle@BOARD", matched case-insensitively. Rows: id, room, user, at, content. */
+int ae_chat_search(ae_chat *c, const char *query, const char *room, const char *user, int limit);
 
 /** GET /emoji.txt. Rows: name, display, ascii (an image emoji has the two text fields empty). */
 int ae_chat_emoji_list(ae_chat *c);

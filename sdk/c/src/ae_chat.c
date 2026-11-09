@@ -851,13 +851,13 @@ static void json_to_rows(ae_chat *c, const char *const *keys, int nkeys)
 
 int ae_chat_pins(ae_chat *c, const char *room)
 {
-    static const char *const keys[] = { "messageId", "user", "content", "pinnedBy", "at" };
+    static const char *const keys[] = { "messageId", "user", "content", "pinnedBy", "at", "messageAt" };
     char path[PATH_MAX_LEN];
     int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/pins");
 
     if (rc != AE_CHAT_OK) return rc;
     rc = call(c, "GET", path, 0, 0);
-    if (rc == AE_CHAT_OK) json_to_rows(c, keys, 5);
+    if (rc == AE_CHAT_OK) json_to_rows(c, keys, 6);
     return rc;
 }
 
@@ -886,7 +886,7 @@ int ae_chat_pin(ae_chat *c, const char *room, const char *msg_id, int pin)
     return call(c, "POST", path, body, (unsigned long)at);
 }
 
-int ae_chat_search(ae_chat *c, const char *query, const char *room, int limit)
+int ae_chat_search(ae_chat *c, const char *query, const char *room, const char *user, int limit)
 {
     static const char *const keys[] = { "id", "room", "user", "at", "content" };
     char path[PATH_MAX_LEN];
@@ -905,6 +905,12 @@ int ae_chat_search(ae_chat *c, const char *query, const char *room, int limit)
         if (ae_req_url_escape(room, resc, sizeof resc) < 0 || strlen(path) + strlen(resc) + 8 >= sizeof path)
             return AE_CHAT_ERR_TOO_LONG;
         sprintf(path + strlen(path), "&room=%s", resc);
+    }
+    if (!blank(user)) {
+        char uesc[160];
+        if (ae_req_url_escape(user, uesc, sizeof uesc) < 0 || strlen(path) + strlen(uesc) + 8 >= sizeof path)
+            return AE_CHAT_ERR_TOO_LONG;
+        sprintf(path + strlen(path), "&user=%s", uesc);
     }
     rc = call(c, "GET", path, 0, 0);
     if (rc == AE_CHAT_OK) json_to_rows(c, keys, 5);

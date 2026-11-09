@@ -56,6 +56,7 @@ enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE, LC_EVENT };
 #define LC_REACT_MAX 8
 #define LC_VIEW_MAX 40
 #define LC_VIEW_COL 100
+#define LC_SEARCH_MAX 20         /* result rows the search overlay holds (the hub search limit asked for) */
 
 typedef struct {
     char emoji[12];        /* the server's name: "+1", "heart", ... */
@@ -133,6 +134,12 @@ typedef struct {
     char modal_text[96];
     char prompt[48];
     int prompt_len;
+    int search;                    /* the search overlay (TS ui/search-overlay.ts on the SDK SearchModal) */
+    int search_field;              /* 0 Query, 1 "Username (optional)"; Tab cycles the two (search-modal.ts) */
+    char search_q[48];
+    char search_user[32];
+    int search_n, search_sel, search_top;   /* the Results list: rows held, selected row, first row shown */
+    char search_rows[LC_SEARCH_MAX][LC_VIEW_COL];
     ui_popup ctx;                  /* the right-click menu (TS features/context-menus.ts) */
     int ctx_kind;                  /* LC_CTX_* */
     int ctx_target;                /* side index (user, channel) or line index (chat) */
@@ -185,7 +192,8 @@ enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL, LC_CTX_REACT, LC_C
 /* What a click lands on, from the regions the last lc_draw laid out. */
 enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, LC_HIT_INPUT,
        LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL, LC_HIT_SCROLLBAR,
-       LC_HIT_FMT, LC_HIT_FMT_CAT, LC_HIT_FMT_ITEM, LC_HIT_FMT_CLOSE };
+       LC_HIT_FMT, LC_HIT_FMT_CAT, LC_HIT_FMT_ITEM, LC_HIT_FMT_CLOSE,
+       LC_HIT_SEARCH, LC_HIT_SEARCH_Q, LC_HIT_SEARCH_USER, LC_HIT_SEARCH_ROW };
 
 #define LC_SCROLL_TRACK 66
 #define LC_SCROLL_THUMB 195
