@@ -643,7 +643,7 @@ static void test_door_phase_a(void)
 {
     int i, found = 0;
     start_stub();
-    drive(KEYS("\r" "/me waves\r" "/me\r" "/pin\r" "/pin m1\r" "/unpin m1\r" "/search a\r" "/search hello\r"
+    drive(KEYS("\r" "/me waves\r" "/me\r" "/pin\r" "/pin m1\r" "/unpin m1\r" "/search a\r"
                "/motd\r" "/motd Be nice\r" "/motd\r" "/motd --clear\r"
                "/customemoji\r" "/customemoji remove :party:\r" "/customemoji add :Zork: hi o/\r" "/customemoji add smile a b\r"
                "/customemoji add x y\r" "/customemoji bogus\r"
@@ -654,7 +654,6 @@ static void test_door_phase_a(void)
     assert(has_line(0, "Error: Usage: /pin <msg-id>"));
     assert(st->pin_calls == 2 && has_line(0, "Pin requested.") && has_line(0, "Unpin requested."));
     assert(has_line(0, "Search query must be at least 2 characters"));
-    assert(has_line(0, "Found 1 result for \"hello\"") && has_line(0, "alice: hello there"));
     assert(has_line(0, "No MOTD set. Use /motd <text> to set, /motd --clear to clear."));
     assert(has_line(0, "[MOTD] Be nice") && has_line(0, "[MOTD] cleared"));
     assert(st->room_motd_puts == 2);
@@ -679,6 +678,12 @@ static void test_door_phase_a(void)
     assert(M.view && strcmp(M.view_title, "Pinned Messages") == 0 && st->pin_calls == 0);
     for (i = 0; i < M.view_n; i++) if (strstr(M.view_text[i], "alice: hello there") != 0) found = 1;
     assert(found);
+    assert(strcmp(M.view_text[0], "=Pinned Messages (1):") == 0 && strncmp(M.view_text[3], "   Pinned by ", 13) == 0);
+    drive(KEYS("\x1b"), 0);
+    assert(!M.view);
+    drive(KEYS("/search hello\r"), 0);                      /* TS search overlay: rows "N. user @ date: message", then the system line */
+    assert(M.view && strcmp(M.view_title, "Message Search") == 0 && has_line(0, "Found 1 results for \"hello\""));
+    assert(strncmp(M.view_text[0], "1. alice @ ", 11) == 0 && strstr(M.view_text[0], ": hello there") != 0);
     drive(KEYS("\x1b"), 0);
     assert(!M.view);
     drive(KEYS("/thread 1\r"), 0);
@@ -686,6 +691,22 @@ static void test_door_phase_a(void)
     assert(strcmp(M.view_text[0], "=Original Message:") == 0 && strstr(M.view_text[1], "alice: hello there") != 0);
     stop_stub();
     printf("  [OK] door: /pinned and /thread <n> open the text overlay, a key closes it\n");
+}
+
+/* C1: /emoji <query> searches and /emojis [category] lists, with the TS texts and the ten-row limit. */
+static void test_door_emoji_commands(void)
+{
+    start_stub();
+    drive(KEYS("\r" "/emoji happy\r" "/emoji zzzq\r" "/emoji LOVE\r" "/emoji e\r" "/emojis\r" "/emojis Action\r" "/emojis nope\r"), 0);
+    assert(has_line(0, "Emojis matching \"happy\":") && has_line(0, "  :-)  :smile: (happy, grin)"));
+    assert(has_line(0, "No emojis found for \"zzzq\""));
+    assert(has_line(0, "  <3  :heart: (love)") && has_line(0, "  :-*  :kiss: (love, romance)"));
+    assert(has_line(0, "Emojis matching \"e\":") && has_line(0, "  ... and ") && has_line(0, " more"));
+    assert(has_line(0, "Emoji Categories:") && has_line(0, "Use /emoji to open emoji picker") && has_line(0, "  actions - Kaomoji actions"));
+    assert(has_line(0, "Actions Emojis:") && has_line(0, "  (>^_^)<  :hug: (cuddle, embrace)"));
+    assert(has_line(0, "Unknown category \"nope\". Use /emojis to see all categories."));
+    stop_stub();
+    printf("  [OK] door: /emoji <query> and /emojis [category] print the TS lists\n");
 }
 
 /* B2: delete by default takes the caller's last line; a kick of the caller leaves the room; low levels are refused. */
@@ -1116,6 +1137,7 @@ int main(void)
     test_door_message_formatting();
     test_door_format_picker();
     test_door_emoji_picker();
+    test_door_emoji_commands();
     test_door_no_config();
     test_config_save();
     test_register();

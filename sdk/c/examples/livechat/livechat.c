@@ -364,6 +364,13 @@ static void motd_line(const char *text)
     M.lines[M.nlines - 1].tone = LC_ACTIVITY;
 }
 
+/** TS addSystemMessage("{accent}text{/accent}"): a system line in the accent colour. */
+static void accent_line(const char *text)
+{
+    add_note(LC_SYSTEM, text);
+    M.lines[M.nlines - 1].tone = LC_ACCENT;
+}
+
 /* ---- modals ------------------------------------------------------------- */
 
 static void message_modal(const char *title, const char *text)
@@ -1537,17 +1544,37 @@ static void view_add(const char *text)
     if (M.view_n < LC_VIEW_MAX) copy(M.view_text[M.view_n++], LC_VIEW_COL, text);
 }
 
-/** /pinned (alias pins): TS pinned-panel.ts as the text overlay. */
+/** An epoch the server sent (seconds or milliseconds) as JS toLocaleString("en-US") prints it: "11/9/2026, 3:04:05 PM". */
+static void datetime_of(char *out, const char *epoch)
+{
+    char digits[12];
+    time_t t;
+    struct tm *tm;
+    size_t n = strlen(epoch);
+    if (n > 10) n = 10;
+    memcpy(digits, epoch, n);
+    digits[n] = '\0';
+    t = (time_t)atol(digits);
+    tm = localtime(&t);
+    if (n == 0 || tm == 0) { strcpy(out, "--"); return; }
+    sprintf(out, "%d/%d/%d, %d:%02d:%02d %s", tm->tm_mon + 1, tm->tm_mday, tm->tm_year + 1900,
+            tm->tm_hour % 12 == 0 ? 12 : tm->tm_hour % 12, tm->tm_min % 60, tm->tm_sec % 61, tm->tm_hour < 12 ? "AM" : "PM");
+}
+
+/** /pinned (alias pins): TS pinned-panel.ts as the text overlay. The hub's pin row has no message-sent time, so the
+    "Sent:" line of the TS panel is left out; the pinned-by line is the TS one. */
 static void pinned_typed(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
-    char t[LC_VIEW_COL + 40], rows[16][LC_VIEW_COL];
+    char t[LC_VIEW_COL + 80], d[40], rows[8][LC_VIEW_COL], by[8][80];
     int n = 0, i, rc;
     if (room_id[0] == '\0') { system_line("Join a room first."); return; }
     rc = ae_chat_pins(&chat, room_id);
     if (rc != AE_CHAT_OK) { show_error(rc); return; }
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && n < 16) {
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && n < 8) {
         sprintf(rows[n], "%.24s: %.60s", f[1], f[2]);
+        datetime_of(d, f[4]);
+        sprintf(by[n], "%.20s on %.30s", f[3], d);
         n++;
     }
     view_open("Pinned Messages");
@@ -1555,31 +1582,49 @@ static void pinned_typed(void)
     else {
         sprintf(t, "=Pinned Messages (%d):", n);
         view_add(t);
+        view_add("");
         for (i = 0; i < n; i++) {
             sprintf(t, "%d. %.90s", i + 1, rows[i]);
             view_add(t);
+            sprintf(t, "   Pinned by %s", by[i]);
+            view_add(t);
+            view_add("");
         }
+        view_add("");
     }
     view_add("");
     view_add("Press ESC to close");
 }
 
-/** /search [query] (alias find): TS needs two characters; results print as system lines. */
+/** /search [query] (alias find): TS ui/search-overlay.ts. The results list is the text overlay (rows "N. user @ date:
+    message", or "No results found"), then the system line server.ts prints. No query opens the overlay empty. */
 static void search_typed(const char *rest)
 {
     char *f[AE_CHAT_ROW_FIELDS];
-    char t[LC_TEXT_MAX], hits[10][LC_TEXT_MAX];
+    char t[LC_VIEW_COL + 120], d[40], hits[10][LC_VIEW_COL];
     int n = 0, i, rc;
+    if (*rest == '\0') {
+        view_open("Message Search");
+        view_add("Type /search <query> to search this room.");
+        view_add("");
+        view_add("Press ESC to close");
+        return;
+    }
     if (strlen(rest) < 2) { system_line("Search query must be at least 2 characters"); return; }
     rc = ae_chat_search(&chat, rest, room_id[0] != '\0' ? room_id : 0, 10);
     if (rc != AE_CHAT_OK) { show_error(rc); return; }
     while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && n < 10) {
-        sprintf(hits[n], "%.24s: %.180s", f[2], f[4]);
+        datetime_of(d, f[3]);
+        sprintf(hits[n], "%.20s @ %.24s: %.40s", f[2], d, f[4]);
         n++;
     }
-    sprintf(t, "Found %d result%s for \"%.100s\"", n, n == 1 ? "" : "s", rest);
+    view_open("Message Search");
+    if (n == 0) view_add("No results found");
+    for (i = 0; i < n; i++) { sprintf(t, "%d. %.94s", i + 1, hits[i]); view_add(t); }
+    view_add("");
+    view_add("Press ESC to close");
+    sprintf(t, "Found %d results for \"%.100s\"", n, rest);
     system_line(t);
-    for (i = 0; i < n; i++) system_line(hits[i]);
 }
 
 /** /motd [text|--clear]: the room's message of the day (TS commands/mode.ts + input-submit-handler).
@@ -1595,6 +1640,52 @@ static void motd_typed(const char *rest)
     }
     if (room_id[0] == '\0') { system_line("Join a room first."); return; }
     then_poll(ae_chat_room_motd(&chat, room_id, strcmp(rest, "--clear") == 0 ? "" : rest));
+}
+
+/** /emoji <query> and /emojis [category] (TS commands/emoji.ts): the lists print as system lines. */
+static void emoji_search_typed(const char *query)
+{
+    char t[LC_TEXT_MAX], one[LC_TEXT_MAX];
+    int k, n = 0, shown = 0;
+    for (k = lc_emoji_next(0, -1, query); k >= 0; k = lc_emoji_next(k + 1, -1, query)) n++;
+    if (n == 0) { sprintf(t, "No emojis found for \"%.100s\"", query); system_line(t); return; }
+    sprintf(t, "Emojis matching \"%.100s\":", query);
+    accent_line(t);
+    for (k = lc_emoji_next(0, -1, query); k >= 0 && shown < 10; k = lc_emoji_next(k + 1, -1, query), shown++) {
+        lc_emoji_line(k, one, sizeof one);
+        system_line(one);
+    }
+    if (n > 10) { sprintf(t, "  ... and %d more", n - 10); system_line(t); }
+}
+
+static void emojis_typed(const char *rest)
+{
+    static const struct { const char *name; int cat; } map[] = {
+        { "emotions", 0 }, { "emotion", 0 }, { "actions", 1 }, { "action", 1 },
+        { "symbols", 2 }, { "symbol", 2 }, { "special", 3 } };
+    char word[40], t[LC_TEXT_MAX], one[LC_TEXT_MAX];
+    int i, k, cat = -1;
+    arg_word(rest, word, sizeof word);
+    for (i = 0; word[i] != '\0'; i++) if (word[i] >= 'A' && word[i] <= 'Z') word[i] = (char)(word[i] + 32);
+    if (word[0] == '\0') {
+        accent_line("Emoji Categories:");
+        system_line("  emotions - Smileys and emotions");
+        system_line("  actions - Kaomoji actions");
+        system_line("  symbols - Common symbols");
+        system_line("  special - BBS-themed emojis");
+        system_line("");
+        system_line("Use /emojis <category> to list emojis in a category");
+        system_line("Use /emoji to open emoji picker");
+        return;
+    }
+    for (i = 0; i < 7; i++) if (strcmp(word, map[i].name) == 0) cat = map[i].cat;
+    if (cat < 0) { sprintf(t, "Unknown category \"%.30s\". Use /emojis to see all categories.", word); system_line(t); return; }
+    sprintf(t, "%s Emojis:", lc_emoji_cat_name(cat));
+    accent_line(t);
+    for (k = lc_emoji_next(0, cat, 0); k >= 0; k = lc_emoji_next(k + 1, cat, 0)) {
+        lc_emoji_line(k, one, sizeof one);
+        system_line(one);
+    }
 }
 
 /** The hub's custom emoji, so a ":name:" in a message shows its ascii face (TS utils/emojis.ts). Best effort. */
@@ -1770,6 +1861,8 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "search", "find")) { search_typed(rest); return 0; }
     if (strcmp(cmd, "motd") == 0) { motd_typed(rest); return 0; }
     if (strcmp(cmd, "emoji") == 0 && *rest == '\0') { emoji_show(); return 0; }   /* commands/emoji.ts: no query opens the picker */
+    if (strcmp(cmd, "emoji") == 0) { emoji_search_typed(rest); return 0; }
+    if (strcmp(cmd, "emojis") == 0) { emojis_typed(rest); return 0; }
     if (strcmp(cmd, "customemoji") == 0) { customemoji_typed(rest); return 0; }
     system_line("Unknown command. Type /help for help.");
     return 0;

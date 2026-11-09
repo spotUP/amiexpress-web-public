@@ -232,6 +232,11 @@ void lc_custom_emoji_clear(void);
 void lc_custom_emoji_add(const char *name, const char *ascii);
 /** 1 when `code` (":smile:") is one of the built-in emoji (TS EMOJIS). */
 int lc_emoji_builtin(const char *code);
+/** TS allEmojis() order (built-ins, then custom): the next index at or after `from` in category `cat` (-1 any) whose code or
+    one keyword contains `query` (NULL any, TS searchEmojis); -1 at the end. */
+int lc_emoji_next(int from, int cat, const char *query);
+/** TS "  <face>  <code> (<keywords>)" for the emoji at an lc_emoji_next index. */
+void lc_emoji_line(int k, char *out, int cap);
 /** The reactions the React picker offers, in its order: the server's names (TS REACTION_EMOJIS). */
 #define LC_REACT_KINDS 8
 extern const char *const lc_react_names[LC_REACT_KINDS];

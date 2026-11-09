@@ -177,50 +177,50 @@ void lc_custom_emoji_add(const char *name, const char *ascii)
 }
 
 /* TS utils/emojis.ts EMOJIS (code, display text, category: 0 Emotions 1 Actions 2 Symbols 3 Special). */
-static const struct { const char *code, *text; int cat; } emoji_table[] = {
-    { ":smile:", ":-)", 0 },
-    { ":grin:", ":D", 0 },
-    { ":joy:", "XD", 0 },
-    { ":wink:", ";-)", 0 },
-    { ":heart:", "<3", 0 },
-    { ":sad:", ":-(", 0 },
-    { ":cry:", ":'-(", 0 },
-    { ":shock:", ":O", 0 },
-    { ":angry:", ">:-(", 0 },
-    { ":cool:", "B-)", 0 },
-    { ":tongue:", ":P", 0 },
-    { ":kiss:", ":-*", 0 },
-    { ":blush:", ":-}", 0 },
-    { ":confused:", ":-/", 0 },
-    { ":neutral:", ":-|", 0 },
-    { ":surprised:", ":o", 0 },
-    { ":evil:", ">:-)", 0 },
-    { ":angel:", "O:-)", 0 },
-    { ":tableflip:", "(>_<)~~ |[__]|", 1 },
-    { ":unflip:", "|---| (-_-)", 1 },
-    { ":shrug:", "\\(o.O)/", 1 },
-    { ":fight:", "(>_<)*", 1 },
-    { ":dance:", "\\(^o^)/", 1 },
-    { ":hug:", "(>^_^)<", 1 },
-    { ":run:", "(>_>)===>", 1 },
-    { ":wave:", "(^.^)/", 1 },
-    { ":facepalm:", "(>_<;)", 1 },
-    { ":thumbsup:", "(Y)", 2 },
-    { ":thumbsdown:", "(N)", 2 },
-    { ":fire:", "(*)", 2 },
-    { ":star:", "*", 2 },
-    { ":check:", "[v]", 2 },
-    { ":x:", "[x]", 2 },
-    { ":skull:", "8X", 2 },
-    { ":music:", "~o~", 2 },
-    { ":heart2:", "<3", 2 },
-    { ":diamond:", "<>", 2 },
-    { ":arrow:", "->", 2 },
-    { ":warning:", "(!)", 2 },
-    { ":lightning:", "/!\\", 2 },
-    { ":amiga:", "[A]", 3 },
-    { ":bbs:", "[BBS]", 3 },
-    { ":door:", "[=>]", 3 },
+static const struct { const char *code, *text, *keywords; int cat; } emoji_table[] = {
+    { ":smile:", ":-)", "happy, grin", 0 },
+    { ":grin:", ":D", "big, smile, laugh", 0 },
+    { ":joy:", "XD", "laugh, lol", 0 },
+    { ":wink:", ";-)", "flirt", 0 },
+    { ":heart:", "<3", "love", 0 },
+    { ":sad:", ":-(", "unhappy, frown", 0 },
+    { ":cry:", ":'-(", "tears, sob", 0 },
+    { ":shock:", ":O", "surprised, wow", 0 },
+    { ":angry:", ">:-(", "mad, furious", 0 },
+    { ":cool:", "B-)", "sunglasses, awesome", 0 },
+    { ":tongue:", ":P", "playful, silly", 0 },
+    { ":kiss:", ":-*", "love, romance", 0 },
+    { ":blush:", ":-}", "shy, embarrassed", 0 },
+    { ":confused:", ":-/", "unsure, puzzled", 0 },
+    { ":neutral:", ":-|", "meh, okay", 0 },
+    { ":surprised:", ":o", "wow, shocked", 0 },
+    { ":evil:", ">:-)", "devil, mischief", 0 },
+    { ":angel:", "O:-)", "innocent, halo", 0 },
+    { ":tableflip:", "(>_<)~~ |[__]|", "rage, flip, angry", 1 },
+    { ":unflip:", "|---| (-_-)", "calm, fix", 1 },
+    { ":shrug:", "\\(o.O)/", "dunno, whatever", 1 },
+    { ":fight:", "(>_<)*", "battle, fite", 1 },
+    { ":dance:", "\\(^o^)/", "party", 1 },
+    { ":hug:", "(>^_^)<", "cuddle, embrace", 1 },
+    { ":run:", "(>_>)===>", "flee, escape", 1 },
+    { ":wave:", "(^.^)/", "hello, bye", 1 },
+    { ":facepalm:", "(>_<;)", "disappointed, sigh", 1 },
+    { ":thumbsup:", "(Y)", "yes, ok, good", 2 },
+    { ":thumbsdown:", "(N)", "no, bad", 2 },
+    { ":fire:", "(*)", "hot, lit", 2 },
+    { ":star:", "*", "favorite", 2 },
+    { ":check:", "[v]", "yes, done", 2 },
+    { ":x:", "[x]", "no, fail", 2 },
+    { ":skull:", "8X", "death, pirate", 2 },
+    { ":music:", "~o~", "song, note", 2 },
+    { ":heart2:", "<3", "love, like", 2 },
+    { ":diamond:", "<>", "gem, shine", 2 },
+    { ":arrow:", "->", "next, go", 2 },
+    { ":warning:", "(!)", "caution, alert", 2 },
+    { ":lightning:", "/!\\", "power, fast", 2 },
+    { ":amiga:", "[A]", "boing, retro, computer", 3 },
+    { ":bbs:", "[BBS]", "board, system", 3 },
+    { ":door:", "[=>]", "game, app", 3 },
 };
 #define NEMOJI ((int)(sizeof emoji_table / sizeof emoji_table[0]))
 
@@ -1088,6 +1088,70 @@ const char *lc_emoji_text(int cat, int item)
     int k = emoji_nth(cat, item);
     if (k < NEMOJI) return emoji_table[k].text;
     return k - NEMOJI < ncustom_emoji ? custom_emoji[k - NEMOJI].ascii : "";
+}
+
+/* ---- TS utils/emojis.ts allEmojis(): the built-ins, then the board's custom emoji (keyword "custom", category Special) ---- */
+static int emoji_all_cat(int k) { return k < NEMOJI ? emoji_table[k].cat : 3; }
+
+static const char *emoji_all_keywords(int k) { return k < NEMOJI ? emoji_table[k].keywords : "custom"; }
+
+/* 1 when `needle` (already lower case) occurs in `hay`, compared without case: JS includes() on a lower-cased string. */
+static int contains_nocase(const char *hay, const char *needle)
+{
+    size_t i, j, nl = strlen(needle);
+    for (i = 0; hay[i] != '\0'; i++) {
+        for (j = 0; j < nl; j++) {
+            char a = hay[i + j];
+            if (a == '\0') return 0;
+            if (a >= 'A' && a <= 'Z') a = (char)(a + 32);
+            if (a != needle[j]) break;
+        }
+        if (j == nl) return 1;
+    }
+    return nl == 0;
+}
+
+/* TS searchEmojis(): the query is a part of the code, or a part of any one keyword. */
+static int emoji_all_matches(int k, const char *lower)
+{
+    char code[LC_CUSTOM_EMOJI_LEN + 4], kw[64];
+    const char *p = emoji_all_keywords(k);
+    if (k < NEMOJI) sprintf(code, "%s", emoji_table[k].code);
+    else sprintf(code, ":%s:", custom_emoji[k - NEMOJI].name);
+    if (contains_nocase(code, lower)) return 1;
+    while (*p != '\0') {
+        size_t n = 0;
+        while (p[n] != '\0' && !(p[n] == ',' && p[n + 1] == ' ')) n++;
+        sprintf(kw, "%.*s", n < sizeof kw - 1 ? (int)n : (int)sizeof kw - 1, p);
+        if (contains_nocase(kw, lower)) return 1;
+        p += n;
+        if (*p == ',') p += 2;
+    }
+    return 0;
+}
+
+int lc_emoji_next(int from, int cat, const char *query)
+{
+    char lower[64];
+    int k, i;
+    if (query != 0) {
+        for (i = 0; query[i] != '\0' && i < 63; i++) lower[i] = (query[i] >= 'A' && query[i] <= 'Z') ? (char)(query[i] + 32) : query[i];
+        lower[i] = '\0';
+    }
+    for (k = from; k < NEMOJI + ncustom_emoji; k++) {
+        if (cat >= 0 && emoji_all_cat(k) != cat) continue;
+        if (query != 0 && !emoji_all_matches(k, lower)) continue;
+        return k;
+    }
+    return -1;
+}
+
+void lc_emoji_line(int k, char *out, int cap)
+{
+    const char *face = k < NEMOJI ? emoji_table[k].text : custom_emoji[k - NEMOJI].ascii;
+    if (k < NEMOJI) sprintf(out, "  %s  %s (%s)", face, emoji_table[k].code, emoji_table[k].keywords);
+    else sprintf(out, "  %s  :%s: (custom)", face, custom_emoji[k - NEMOJI].name);
+    if ((int)strlen(out) >= cap) out[cap - 1] = '\0';
 }
 
 #define EMOJI_GLYPH_COLUMN 16      /* emoji-label.ts GLYPH_COLUMN */
