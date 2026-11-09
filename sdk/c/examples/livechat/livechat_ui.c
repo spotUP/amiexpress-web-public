@@ -15,9 +15,9 @@ static const int menu_col[LC_MENUS] = { 1, 15, 23, 30 };
 const char *const lc_menu_label[LC_MENUS] = { "Chat v3.2.0", "Tools", "View", "Help" };
 static const char *const menu_chat[] = { "Help (F1)", "Channel List (F2)", "Next Channel (F3)", "Join Channel...", "Leave Channel" };
 static const char *const menu_tools[] = { "Emoji (F4)", "Files (F6)", "Pins (F7)", "Search (Ctrl+F)", "Threads" };
-static const char *const menu_view[] = { "Settings (Ctrl+S)", "Theme", "Cycle Render Mode (r)", "Fullscreen / Grid", "Toggle Sidebar", "Clear Chat" };
+static const char *const menu_view[] = { "Settings (Ctrl+S)", "Theme", "Toggle Sidebar", "Clear Chat" };
 static const char *const menu_help[] = { "About", "Keyboard Shortcuts", "Quit (Ctrl+Q)" };
-const int lc_menu_count[LC_MENUS] = { 5, 5, 6, 3 };
+const int lc_menu_count[LC_MENUS] = { 5, 5, 4, 3 };
 const char *const *const lc_menu_items[LC_MENUS] = { menu_chat, menu_tools, menu_view, menu_help };
 
 /* The TS door's help (board/Doors/livechat help content), voice section left out: this door has no voice. */
@@ -86,9 +86,24 @@ unsigned long lc_chat_rewraps;
 
 void lc_lines_changed(lc_model *m) { m->lines_gen = ++lines_clock; }
 
+int lc_col[UI_TOKEN_COUNT];
+
+int lc_tone(int tone) { return tone >= LC_TK_BASE && tone < LC_TK_BASE + UI_TOKEN_COUNT ? lc_col[tone - LC_TK_BASE] : tone; }
+
+/* rgb_cube is defined below with the format picker; the palette needs it first. */
+static int rgb_cube(unsigned long rgb);
+
+void lc_theme_set(const unsigned long *rgb)
+{
+    int t;
+    for (t = 0; t < UI_TOKEN_COUNT; t++) lc_col[t] = rgb_cube(rgb[t]);
+}
+
 void lc_model_init(lc_model *m, int cols, int rows)
 {
     memset(m, 0, sizeof *m);
+    m->rgb = ui_theme_by_id("")->rgb;
+    lc_theme_set(m->rgb);
     m->input_anchor = -1;
     lc_lines_changed(m);
     m->cols = cols;
@@ -135,7 +150,7 @@ static void sb_run(sb *b, const char *s, int len)
     b->p[b->n] = '\0';
 }
 static void sb_str(sb *b, const char *s) { sb_run(b, s, (int)strlen(s)); }
-static void sb_fg(sb *b, int fg) { sb_ch(b, UI_CELLS_M_FG); sb_ch(b, fg); }
+static void sb_fg(sb *b, int fg) { sb_ch(b, UI_CELLS_M_FG); sb_ch(b, lc_tone(fg)); }
 
 /* ---- Incoming message formatting: the TS render path, board/Doors/livechat/core/formatter.ts:12-13 (parseContent,
  * then highlightMentions), utils/markdown.ts and utils/mentions.ts. The cell canvas paints no background per run, so a
@@ -317,8 +332,8 @@ static int hex_color(const char *s, int len)
 /* "~rainbow~" ... "~/rainbow~": the animation tags (format-picker.ts:31-36). The door animates nothing, so a run takes
  * the static look the TS picker previews for it (format-picker.ts:116-121). Returns the tag length, 0 when s is no tag. */
 static const struct { const char *name, *label; int fg, bold; } fx[] = {
-    { "rainbow", "Rainbow", LC_ACTIVITY, 1 }, { "pulse", "Pulse", LC_ACCENT, 1 }, { "sparkle", "Sparkle", LC_ACTIVITY, 1 },
-    { "shake", "Shake", LC_ALERT, 1 }, { "wave", "Wave", LC_GREY, 1 }, { "gradient", "Gradient", LC_ACCENT, 0 } };
+    { "rainbow", "Rainbow", LC_TK_ACCENT_ALT, 1 }, { "pulse", "Pulse", LC_TK_ACCENT, 1 }, { "sparkle", "Sparkle", LC_TK_ACCENT_ALT, 1 },
+    { "shake", "Shake", LC_TK_ALERT, 1 }, { "wave", "Wave", LC_TK_INK, 1 }, { "gradient", "Gradient", LC_TK_ACCENT, 0 } };
 #define FX_COUNT 6
 
 static int effect_tag(const char *s, int *closing, int *fg, int *bold)
@@ -332,7 +347,7 @@ static int effect_tag(const char *s, int *closing, int *fg, int *bold)
     for (i = 0; i < FX_COUNT; i++) {
         size_t nl = strlen(fx[i].name);
         if (strncmp(p, fx[i].name, nl) == 0 && (p + nl == end || (!*closing && p[nl] == ' '))) {
-            *fg = fx[i].fg;
+            *fg = lc_tone(fx[i].fg);
             *bold = fx[i].bold;
             return (int)(end - s) + 1;
         }
@@ -624,8 +639,8 @@ static void draw_side_item(ui_cells *c, const lc_side *s, int row, int width, in
     }
     case LC_SIDE_USER: {                   /* TS user-status marks: [*] online, [~] away, [-] do not disturb; [!] busy */
         const char *dot = s->status == 'a' ? "[~]" : s->status == 'b' ? "[!]" : s->status == 'd' ? "[-]" : "[*]";
-        if (s->note[0] != '\0') sprintf(buf, "%s  \001\360%s\004 %.20s: %.14s", mark, dot, s->label, s->note);
-        else sprintf(buf, "%s  \001\360%s\004 %.38s", mark, dot, s->label);
+        if (s->note[0] != '\0') sprintf(buf, "%s  \001%c%s\004 %.20s: %.14s", mark, (char)LC_DIM, dot, s->label, s->note);
+        else sprintf(buf, "%s  \001%c%s\004 %.38s", mark, (char)LC_DIM, dot, s->label);
         break;
     }
     case LC_SIDE_DM: sprintf(buf, "%s@ %.38s", mark, s->label); break;
@@ -1469,7 +1484,7 @@ static void draw_settings(ui_cells *c, const lc_model *m)
         int x = i <= LC_SET_ANNOUNCE ? l + 2 : l, sel = m->settings_sel == i;
         if (i == LC_SET_CLOSE) {                    /* blessed.button bottom 1, centre, width 12, bg T.bar, focus bg accent */
             int bx = left + (w - 2 - 12) / 2;
-            ui_cells_pen(c, LC_INK, sel ? LC_ACCENT : LC_EV_BAR, 0);
+            ui_cells_pen(c, LC_INK, sel ? LC_ACCENT : lc_tone(LC_EV_BAR), 0);
             ui_cells_fill(c, top + row[i], bx, 1, 12, ' ');
             ui_cells_text(c, top + row[i], bx, set_label[i], 12);
         } else {
@@ -1485,6 +1500,34 @@ static void draw_settings(ui_cells *c, const lc_model *m)
     ui_cells_pen(c, LC_ACCENT, UI_CELLS_DEFAULT, 0);
     ui_cells_text(c, top + status, l, "Status:", 20);
     ui_hit_add(&lc_hits, LC_HIT_SETTINGS_ROW, top, left, h - 2, w - 2);
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+}
+
+static int theme_first;                         /* the first theme row shown (the list scrolls to keep the highlight in view) */
+
+/* TS overlays/theme-menu.ts: a 54-wide panel labelled " Theme ", one row per theme ` name.padEnd(18) blurb`, the
+ * highlight in selection colours, and the help line on the interior's last row in the dim colour. */
+static void draw_theme(ui_cells *c, const lc_model *m)
+{
+    int n = ui_theme_count(), h = n + 6 < 20 ? n + 6 : 20, w = 54, top, left, vis, i;
+    char t[96];
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_modal(c, h, w, LC_CHROME, " Theme ", LC_INK, &top, &left);
+    ui_hit_add(&lc_hits, LC_HIT_THEME, top, left, h, w);
+    top++; left++;
+    vis = n < h - 3 ? n : h - 3;
+    theme_first = m->theme_sel >= vis ? m->theme_sel - vis + 1 : 0;
+    for (i = 0; i < vis; i++) {
+        const ui_theme *th = ui_theme_at(theme_first + i);
+        int sel = theme_first + i == m->theme_sel;
+        sprintf(t, " %-18s%s", th->name, th->blurb);
+        ui_cells_pen(c, sel ? LC_SEL_INK : LC_INK, sel ? LC_SEL_BG : UI_CELLS_DEFAULT, 0);
+        ui_cells_fill(c, top + i, left, 1, w - 2, ' ');
+        ui_cells_text(c, top + i, left, t, w - 2);
+    }
+    ui_hit_add(&lc_hits, LC_HIT_THEME_ROW, top, left, vis, w - 2);
+    ui_cells_pen(c, LC_DIM, UI_CELLS_DEFAULT, 0);
+    ui_cells_text(c, top + h - 3, left + 1, "UP/DOWN previews.  ENTER keeps it.  ESC puts it back.", w - 4);
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
 }
 
@@ -1526,6 +1569,7 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
     if (m->view) draw_view(c, m);
     if (m->search) draw_search(c, m, cursor_row, cursor_col);
     if (m->settings) draw_settings(c, m);
+    if (m->theme) draw_theme(c, m);
     if (m->modal != LC_MODAL_NONE) draw_modal(c, m, cursor_row, cursor_col);
 }
 
@@ -1550,6 +1594,7 @@ int lc_hit(int row, int col, int *index)
             if (col >= menu_col[k] && col < menu_col[k] + (int)strlen(lc_menu_label[k])) *index = k;
         break;
     case LC_HIT_DROPDOWN: case LC_HIT_SIDEBAR: case LC_HIT_FMT_CAT: case LC_HIT_FMT_ITEM: case LC_HIT_SEARCH_ROW: *index = dr; break;
+    case LC_HIT_THEME_ROW: *index = theme_first + dr; break;
     case LC_HIT_SETTINGS_ROW: *index = dr >= 0 && dr < 64 ? set_item_at[dr] : -1; break;
     case LC_HIT_CHAT: *index = dr < CHAT_ROWS_MAX ? chat_row_line[dr] : -1; break;
     case LC_HIT_STATUS: *index = col; break;

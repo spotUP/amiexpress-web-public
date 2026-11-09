@@ -16,18 +16,38 @@
 #define LIVECHAT_UI_H
 
 #include "ui_cells.h"
+#include "ui_theme.h"
 
-#define LC_INK        255   /* text */
-#define LC_ACCENT     204   /* borders, menu bar ground, section heads */
-#define LC_BORDER_FOCUS 255 /* the focused panel's border: TS PANEL_BORDER_FOCUS = theme ink (ui/theme.ts) */
-#define LC_ALERT      196   /* sysop-only destructive menu items (TS alert colour) */
-#define LC_DIM        240   /* timestamps, system lines, rooms not joined */
-#define LC_ACTIVITY   221   /* activity lines, the emoji button face */
-#define LC_OK         78    /* rooms with unread lines: TS T.ok #57E389 */
-#define LC_BAR_INK    0     /* menu bar labels */
-#define LC_GREY       7     /* label bar text, masthead edges, emoji button border */
-#define LC_LABEL_BG   4     /* chat pane label bar ground */
-#define LC_LABEL_TAIL 3     /* the last three cells of the label bar */
+/* The door's colours are the active ui_theme's tokens, as xterm-256 cube indexes (TS ui/theme.ts T.*). One
+   table, lc_col[], filled by lc_theme_set(); a View > Theme preview re-fills it and the next frame repaints. */
+extern int lc_col[UI_TOKEN_COUNT];
+void lc_theme_set(const unsigned long *rgb);
+#define LC_INK        (lc_col[UI_T_INK])          /* text */
+#define LC_ACCENT     (lc_col[UI_T_ACCENT])       /* borders, menu bar ground, section heads */
+#define LC_BORDER_FOCUS (lc_col[UI_T_INK])        /* the focused panel's border: TS PANEL_BORDER_FOCUS = theme ink */
+#define LC_ALERT      (lc_col[UI_T_ALERT])        /* sysop-only destructive menu items */
+#define LC_DIM        (lc_col[UI_T_DIM])          /* timestamps, system lines, rooms not joined */
+#define LC_ACTIVITY   (lc_col[UI_T_ACCENT_ALT])   /* activity lines, the emoji button face (TS T.accentAlt) */
+#define LC_OK         (lc_col[UI_T_OK])           /* rooms with unread lines: TS T.ok */
+#define LC_BAR_INK    (lc_col[UI_T_GROUND])       /* menu bar labels: TS menu-bar.ts barInk() = the ground (snapToReadable) on the accent bar */
+#define LC_GREY       (lc_col[UI_T_INK])          /* label bar text (TS labelStyle fg = T.ink) */
+#define LC_LABEL_BG   (lc_col[UI_T_BAR])          /* label bar ground (TS labelStyle bg = T.bar) */
+#define LC_CHROME     (lc_col[UI_T_CHROME])       /* the theme panel border (TS theme-menu.ts border fg) */
+#define LC_SEL_BG     (lc_col[UI_T_SELECTION_BG])
+#define LC_SEL_INK    (lc_col[UI_T_SELECTION_INK])
+#define LC_LABEL_TAIL (lc_col[UI_T_INK])          /* the last three cells of the label bar */
+
+/* A colour that must follow a live re-theme but is stored in a line: LC_TK_x is 1000 + the token; lc_tone()
+   resolves it when the line is drawn. A value below 1000 is a fixed cell colour and is returned as is. */
+#define LC_TK_BASE        1000
+#define LC_TK_INK         (LC_TK_BASE + UI_T_INK)
+#define LC_TK_ACCENT      (LC_TK_BASE + UI_T_ACCENT)
+#define LC_TK_ACCENT_ALT  (LC_TK_BASE + UI_T_ACCENT_ALT)
+#define LC_TK_DIM         (LC_TK_BASE + UI_T_DIM)
+#define LC_TK_ALERT       (LC_TK_BASE + UI_T_ALERT)
+#define LC_TK_OK          (LC_TK_BASE + UI_T_OK)
+#define LC_TK_BAR         (LC_TK_BASE + UI_T_BAR)
+int lc_tone(int tone);
 
 #define LC_LINES     80
 #define LC_TEXT_MAX  240
@@ -41,8 +61,8 @@ enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE, LC_EVENT };
 
 /* The TS event tags on this theme (sdk/engines/ui/theme/tokens.ts), as cell colours. A cell colour
    is 1..255, so blessed "black" (T.bar) is xterm 16. */
-#define LC_EV_OK         78    /* T.ok #57E389 */
-#define LC_EV_BAR        16    /* T.bar 'black' */
+#define LC_EV_OK         LC_TK_OK    /* T.ok */
+#define LC_EV_BAR        LC_TK_BAR   /* T.bar */
 #define LC_EV_GREEN      2
 #define LC_EV_YELLOW     3
 #define LC_EV_RED        1
@@ -155,6 +175,10 @@ typedef struct {
     int settings_sel;              /* LC_SET_* row that has the keys */
     int settings_val[8];
     int settings_status;           /* 0 online, 1 away, 2 busy, 3 dnd */
+    /* The View > Theme overlay (TS overlays/theme-menu.ts): one row per ui_theme, moving previews it live. */
+    int theme;                     /* shown */
+    int theme_sel;                 /* highlighted row */
+    int theme_opened;              /* the row that was active on open: Esc puts it back */
     ui_popup ctx;                  /* the right-click menu (TS features/context-menus.ts) */
     int ctx_kind;                  /* LC_CTX_* */
     int ctx_target;                /* side index (user, channel) or line index (chat) */
@@ -214,7 +238,7 @@ enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, L
        LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL, LC_HIT_SCROLLBAR,
        LC_HIT_FMT, LC_HIT_FMT_CAT, LC_HIT_FMT_ITEM, LC_HIT_FMT_CLOSE,
        LC_HIT_SEARCH, LC_HIT_SEARCH_Q, LC_HIT_SEARCH_USER, LC_HIT_SEARCH_ROW,
-       LC_HIT_SETTINGS, LC_HIT_SETTINGS_ROW };   /* SETTINGS_ROW index: the LC_SET_* row, -1 a gap */
+       LC_HIT_SETTINGS, LC_HIT_SETTINGS_ROW, LC_HIT_THEME, LC_HIT_THEME_ROW };   /* SETTINGS_ROW index: the LC_SET_* row, -1 a gap */
 
 /* ---- the settings overlay rows (TS settings-checkboxes-events/-prefs, settings-status-radio) ---- */
 enum { LC_SET_LOGINS, LC_SET_FILES, LC_SET_DOORS, LC_SET_MESSAGES, LC_SET_ANNOUNCE,
@@ -226,8 +250,8 @@ const char *lc_settings_label(int item);
  *  screen. Fills row[LC_SET_ITEMS] plus the "BBS Events:", rule and "Status:" rows (interior offsets). */
 void lc_settings_layout(int cols, int rows, int *h, int *w, int row[LC_SET_ITEMS], int *head, int *rule, int *status);
 
-#define LC_SCROLL_TRACK 66
-#define LC_SCROLL_THUMB 195
+#define LC_SCROLL_TRACK (lc_col[UI_T_DIM])     /* TS scrollbarRoles: track = T.dim, thumb = T.ink */
+#define LC_SCROLL_THUMB (lc_col[UI_T_INK])
 #define LC_MENUS 4
 extern const char *const lc_menu_label[LC_MENUS];
 extern const int lc_menu_count[LC_MENUS];

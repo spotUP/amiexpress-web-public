@@ -378,14 +378,14 @@ static void system_line(const char *text) { add_note(LC_SYSTEM, text); }
 static void motd_line(const char *text)
 {
     add_note(LC_SYSTEM, text);
-    M.lines[M.nlines - 1].tone = LC_ACTIVITY;
+    M.lines[M.nlines - 1].tone = LC_TK_ACCENT_ALT;
 }
 
 /** TS addSystemMessage("{accent}text{/accent}"): a system line in the accent colour. */
 static void accent_line(const char *text)
 {
     add_note(LC_SYSTEM, text);
-    M.lines[M.nlines - 1].tone = LC_ACCENT;
+    M.lines[M.nlines - 1].tone = LC_TK_ACCENT;
 }
 
 /** TS acm(formatDmLine(d)): "[DM to x]: text" in magenta when sent, "[DM from x]: text" in cyan
@@ -403,7 +403,7 @@ static void dm_line(int sent, int group, const char *who, const char *text)
 static void alert_line(const char *text)
 {
     add_note(LC_SYSTEM, text);
-    M.lines[M.nlines - 1].tone = LC_ALERT;
+    M.lines[M.nlines - 1].tone = LC_TK_ALERT;
 }
 
 /* ---- modals ------------------------------------------------------------- */
@@ -492,7 +492,7 @@ static void present(void)
 {
     int cr = 0, cc = 0;
     if (M.ntyping > 0) hhmm_now(M.typing_time);
-    int caret = M.focus == LC_FOCUS_INPUT && !M.help && !M.view && M.menu < 0 && !M.settings
+    int caret = M.focus == LC_FOCUS_INPUT && !M.help && !M.view && M.menu < 0 && !M.settings && !M.theme
                 && (M.modal == LC_MODAL_NONE || M.modal == LC_MODAL_PROMPT);
     lc_draw(&cells, &M, &cr, &cc);
     ui_cells_flush(&cells, &screen.buf, drain, 0);
@@ -782,7 +782,7 @@ static void take_bbs_event(const char *at, const char *node, const char *user, c
     if ((login || logout) && !event_hidden(type)) {
         if (login) sprintf(body, "%.30s has logged in (Node %.6s)", user, node);
         else sprintf(body, "%.30s has logged off", user);
-        add_event(0, LC_DIM, "[EVENT] ", login ? LC_EV_GREEN : LC_EV_RED, body, 0);
+        add_event(0, LC_TK_DIM, "[EVENT] ", login ? LC_EV_GREEN : LC_EV_RED, body, 0);
         system_line(body);
     }
     sprintf(head, "* %.40s", user);
@@ -796,7 +796,7 @@ static void take_bbs_event(const char *at, const char *node, const char *user, c
         d = atol(a);
         if (d != 0) sprintf(b, " after %ldm %lds", d / 60, d % 60); else b[0] = '\0';
         sprintf(body, " logged out%s (Node %.6s)", b, node);
-        add_event(at, LC_ACTIVITY, head, 0, body, 0);
+        add_event(at, LC_TK_ACCENT_ALT, head, 0, body, 0);
     } else if (strcmp(type, "upload") == 0 || strcmp(type, "download") == 0) {
         int up = type[0] == 'u';
         ae_req_form_value(data, "fileName", a, sizeof a);
@@ -805,7 +805,7 @@ static void take_bbs_event(const char *at, const char *node, const char *user, c
         ae_req_form_value(data, "conferenceName", c, sizeof c);
         sprintf(body, " %s %.100s%s%s%.80s", up ? "uploaded" : "downloaded", a, kb,
                 c[0] == '\0' ? "" : up ? " to " : " from ", c);
-        add_event(at, up ? LC_EV_BAR : LC_ACTIVITY, head, 0, body, 0);
+        add_event(at, up ? LC_EV_BAR : LC_TK_ACCENT_ALT, head, 0, body, 0);
     } else if (strcmp(type, "door_activity") == 0) {
         int entered;
         ae_req_form_value(data, "action", a, sizeof a);
@@ -827,7 +827,7 @@ static void take_bbs_event(const char *at, const char *node, const char *user, c
         else if (strstr(b, "achievement") || strstr(b, "unlock")) tone = LC_EV_YELLOW;
         else if (strstr(b, "update") || strstr(b, "edit") || strstr(b, "move")) tone = LC_EV_CYAN;
         sprintf(head, "[%.40s]", a[0] != '\0' ? a : "Unknown");
-        if (strcmp(b, "match_result") == 0) tone = LC_ACTIVITY;
+        if (strcmp(b, "match_result") == 0) tone = LC_TK_ACCENT_ALT;
         sprintf(body, " %.30s%s%.150s", user, strcmp(b, "match_result") == 0 ? " " : ": ", c[0] != '\0' ? c : "No message");
         if (score) {
             char flag[8];
@@ -837,7 +837,7 @@ static void take_bbs_event(const char *at, const char *node, const char *user, c
         add_event(at, tone, head, 0, body, pb);
     } else {
         sprintf(head, "* Unknown event: %.20s", type);
-        add_event(at, LC_DIM, head, 0, "", 0);
+        add_event(at, LC_TK_DIM, head, 0, "", 0);
     }
 }
 
@@ -1956,6 +1956,47 @@ static int own_status(void)
     return 0;
 }
 
+/* ---- View > Theme: TS overlays/theme-menu.ts. The highlight IS the preview (every move re-themes the whole door), Enter keeps
+   the theme and saves it on the account, Esc or q puts back the theme the panel opened on. ---- */
+static ae_session *theme_session;       /* main's session, for ae_set_user_theme */
+static char theme_id[32];               /* the theme running now, by id */
+
+static void theme_show(int index)
+{
+    const ui_theme *th = ui_theme_at(index);
+    M.theme_sel = index;
+    M.rgb = th->rgb;
+    lc_theme_set(th->rgb);
+    copy(theme_id, sizeof theme_id, th->id);
+}
+
+static void theme_open(void)
+{
+    int i, n = ui_theme_count(), at = 0;
+    for (i = 0; i < n; i++) if (strcmp(ui_theme_at(i)->id, ui_theme_by_id(theme_id)->id) == 0) at = i;
+    M.theme = 1;
+    M.theme_opened = at;
+    M.theme_sel = at;
+}
+
+static void theme_close(int keep)
+{
+    if (!keep) theme_show(M.theme_opened);
+    M.theme = 0;
+    if (keep && theme_session != 0) ae_set_user_theme(theme_session, theme_id);
+}
+
+static void theme_key(int key)
+{
+    int n = ui_theme_count();
+    if (key == UI_KEY_ESC || key == 'q') theme_close(0);
+    else if (is_enter(key)) theme_close(1);
+    else if (key == UI_KEY_UP) { if (M.theme_sel > 0) theme_show(M.theme_sel - 1); }
+    else if (key == UI_KEY_DOWN) { if (M.theme_sel < n - 1) theme_show(M.theme_sel + 1); }
+    else if (key == UI_KEY_PGUP) theme_show(M.theme_sel > 9 ? M.theme_sel - 10 : 0);
+    else if (key == UI_KEY_PGDN) theme_show(M.theme_sel + 10 < n ? M.theme_sel + 10 : n - 1);
+}
+
 /** Ctrl+S, /settings, View > Settings. The TS overlay resets its boxes to defaults on open; this shows the
     current values instead. */
 static void settings_open(void)
@@ -2925,6 +2966,10 @@ static int handle_mouse(void)
             continue;
         }
         if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) modal_close(); continue; }
+        if (M.theme) {                          /* a click on a theme previews it; a click outside the panel is ignored */
+            if (hit == LC_HIT_THEME_ROW && idx >= 0 && idx < ui_theme_count()) theme_show(idx);
+            continue;
+        }
         if (M.settings) {                       /* a click on an item picks it, as Space does */
             if (hit == LC_HIT_SETTINGS_ROW) settings_pick(idx);
             continue;
@@ -2990,7 +3035,8 @@ static int menu_pick(int menu, int item)
     }
     else if (strncmp(it, "Emoji", 5) == 0) emoji_show();
     else if (strncmp(it, "Settings", 8) == 0) settings_open();
-    else not_yet(it);                       /* Files, Theme, Render, Grid */
+    else if (strcmp(it, "Theme") == 0) theme_open();
+    else not_yet(it);                       /* Files */
     return 0;
 }
 
@@ -3100,6 +3146,7 @@ static int handle_key(int key)
     }
     if (M.search) { search_key(key); return 0; }
     if (M.settings) { settings_key(key); return 0; }
+    if (M.theme) { theme_key(key); return 0; }
     if (M.modal == LC_MODAL_MESSAGE) { modal_close(); return 0; }
     if (M.modal == LC_MODAL_QUIT) {
         if (key == 'y' || key == 'Y' || is_enter(key)) return 1;
@@ -3318,11 +3365,14 @@ int main(int argc, char **argv)
     lc_model_init(&M, screen.cols, screen.rows);
     copy(M.handle, sizeof M.handle, handle);
     M.node = node;
-    {   /* the caller's theme: the format picker's colours are its tokens, as T.* are in TS */
-        char theme_id[32];
-        theme_id[0] = '\0';
-        ae_user_theme(&session, theme_id, (int)sizeof theme_id);
+    {   /* the caller's theme: every colour of the door is a token of it, as T.* are in TS */
+        char saved[32];
+        saved[0] = '\0';
+        ae_user_theme(&session, saved, (int)sizeof saved);
+        theme_session = &session;
+        copy(theme_id, sizeof theme_id, ui_theme_by_id(saved)->id);
         M.rgb = ui_theme_by_id(theme_id)->rgb;
+        lc_theme_set(M.rgb);
     }
 
     keys.next = door_key;

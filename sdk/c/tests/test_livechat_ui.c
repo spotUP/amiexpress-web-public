@@ -25,6 +25,7 @@ static void add_side(lc_model *m, int kind, int joined, const char *label)
     memset(s, 0, sizeof *s);
     s->kind = kind;
     s->joined = joined;
+    s->open = (char)(kind == LC_SIDE_ROOM && joined);   /* door: the active room is expanded (livechat.c isExpanded) */
     strcpy(s->label, label);
 }
 
@@ -54,6 +55,24 @@ static void main_state(lc_model *m, int cols, int rows)
     add_line(m, LC_ACTIVITY_LINE, "17:03", "", "carol joined");
     add_line(m, LC_SYSTEM, "", "", "bob left the room");
     add_line(m, LC_ACTIVITY_LINE, "17:03", "", "bob left");
+}
+
+/* The grids were captured from the TS door when its colours were fixed numbers. The door now draws the active
+ * theme's tokens (View > Theme), so each recorded number is read as the role it stood for and compared against
+ * that role's colour on the running theme. -1 (the terminal's own background) stays. */
+static int fixture_colour(int old)
+{
+    switch (old) {
+    case 255: case 7: case 3: case 195: return LC_INK;     /* text; label bar text; ink thumb */
+    case 204: return LC_ACCENT;
+    case 196: return LC_ALERT;
+    case 240: case 66: return LC_DIM;                      /* dim text; scrollbar track */
+    case 221: return LC_ACTIVITY;
+    case 78: return LC_OK;
+    case 0: return LC_BAR_INK;
+    case 4: case 16: return lc_tone(LC_TK_BAR);            /* label bar ground; black bar */
+    default: return old;
+    }
 }
 
 /* Returns the number of cells that differ; prints the first few. */
@@ -93,6 +112,7 @@ static int compare(const char *path)
                     ui_cell *got = &c.back[row * cols + k];
                     int gbg = (got->flags & UI_CELLS_BG_DEFAULT) ? -1 : got->bg;
                     int gbold = (got->flags & UI_CELLS_BOLD) ? 1 : 0;
+                    fg = fixture_colour(fg); bg = fixture_colour(bg);
                     if (got->ch == ' ' && bg == gbg) continue;   /* fg of a blank cell does not show */
                     if (got->fg != fg || gbg != bg || gbold != bold) {
                         diff++;
@@ -413,17 +433,19 @@ static int slash_menu_rules(void)
 static int event_line_marks(void)
 {
     lc_line l;
-    char out[400];
+    char out[400], want[400];
     int fail = 0;
     memset(&l, 0, sizeof l);
     l.kind = LC_EVENT; strcpy(l.time, "17:03"); strcpy(l.head, "[Tetris]"); strcpy(l.text, " bob: 9000");
     l.tone = LC_EV_YELLOW; l.pb = 1;
     lc_line_marked(&l, out, sizeof out, 1, 0);
-    if (strcmp(out, "\001\314[17:03]\004 \001\003[Tetris]\004 bob: 9000\004 \001\012[NEW PB!]") != 0) { printf("event: '%s'\n", out); fail = 1; }
+    snprintf(want, sizeof want, "\001%c[17:03]\004 \001\003[Tetris]\004 bob: 9000\004 \001\012[NEW PB!]", LC_ACCENT);
+    if (strcmp(out, want) != 0) { printf("event: '%s'\n", out); fail = 1; }
     l.time[0] = '\0'; strcpy(l.head, "[EVENT] "); strcpy(l.text, "bob has logged off");
-    l.tone = LC_DIM; l.body_tone = LC_EV_RED; l.pb = 0;
+    l.tone = LC_TK_DIM; l.body_tone = LC_EV_RED; l.pb = 0;
     lc_line_marked(&l, out, sizeof out, 1, 0);
-    if (strcmp(out, "\001\360[EVENT] \004\001\001bob has logged off") != 0) { printf("event legacy: '%s'\n", out); fail = 1; }
+    snprintf(want, sizeof want, "\001%c[EVENT] \004\001\001bob has logged off", LC_DIM);
+    if (strcmp(out, want) != 0) { printf("event legacy: '%s'\n", out); fail = 1; }
     return fail;
 }
 

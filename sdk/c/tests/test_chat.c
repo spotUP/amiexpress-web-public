@@ -15,7 +15,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-int ae_field_write(int field, const char *value) { (void)field; (void)value; return 0; }
+static char theme_written[64];                     /* the last AE_FIELD_THEME value the door saved */
+int ae_field_write(int field, const char *value)
+{
+    if (field == AE_FIELD_THEME) { strncpy(theme_written, value, sizeof theme_written - 1); theme_written[sizeof theme_written - 1] = '\0'; }
+    return 0;
+}
 int ae_query_bit(int acs) { (void)acs; return 1; }
 static const char *user_level_text = "255";        /* the caller's level the board reports */
 
@@ -749,7 +754,7 @@ static void test_door_phase_a(void)
     assert(has_line(0, "[MOTD] Be nice") && has_line(0, "[MOTD] cleared"));
     assert(st->room_motd_puts == 2);
     for (i = 0; i < M.nlines; i++)                          /* TS accentAlt: the motd text has its own colour */
-        if (strstr(M.lines[i].text, "[MOTD] ") != 0) { assert(M.lines[i].kind == LC_SYSTEM && M.lines[i].tone == LC_ACTIVITY); found++; }
+        if (strstr(M.lines[i].text, "[MOTD] ") != 0) { assert(M.lines[i].kind == LC_SYSTEM && M.lines[i].tone == LC_TK_ACCENT_ALT); found++; }
     assert(found == 3);                                      /* the event, the cached show, the clear */
     found = 0;
     assert(has_line(0, "  party  web PARTY  telnet \\o/") && !has_line(0, "  pic  web") && !has_line(0, "  EMOJI  web"));
@@ -769,7 +774,7 @@ static void test_door_phase_a(void)
     assert(st->mode_calls == 1 && strstr(st->last_write_path, "/rooms/lobby/mode") != 0);
     assert(strcmp(st->last_write_body, "{\"modes\":\"+mo\",\"params\":\"alice\"}") == 0);
     for (i = 0; i < M.nlines; i++)
-        if (strstr(M.lines[i].text, "[Tester] set mode +mo alice") != 0) { assert(M.lines[i].tone == LC_ACTIVITY); found++; }
+        if (strstr(M.lines[i].text, "[Tester] set mode +mo alice") != 0) { assert(M.lines[i].tone == LC_TK_ACCENT_ALT); found++; }
     assert(found == 1);
     found = 0;
     drive(KEYS("\r" "/mode +mx nobody\r"), 0);
@@ -1089,13 +1094,13 @@ static void bbs_row(const char *row)
 static void test_door_bbs_events(void)
 {
     bbs_row("bbs|2|alice|user_login|1700000500|0|location=Stockholm%2C+SE");
-    assert(has_event("[EVENT] ", "alice has logged in (Node 2)", LC_DIM));
+    assert(has_event("[EVENT] ", "alice has logged in (Node 2)", LC_TK_DIM));
     assert(has_line(0, "alice has logged in (Node 2)"));
     assert(has_event("* alice", " logged in from Stockholm, SE (Node 2)", LC_EV_OK));
     stop_stub();
     bbs_row("bbs|1|bob|user_logout|1700000500|0|duration=125");
-    assert(has_event("[EVENT] ", "bob has logged off", LC_DIM));
-    assert(has_event("* bob", " logged out after 2m 5s (Node 1)", LC_ACTIVITY));
+    assert(has_event("[EVENT] ", "bob has logged off", LC_TK_DIM));
+    assert(has_event("* bob", " logged out after 2m 5s (Node 1)", LC_TK_ACCENT_ALT));
     stop_stub();
     strcpy(prefs_stored, "showLogins=0");                  /* the stored pref turns the logins group off */
     bbs_row("bbs|1|bob|user_login|1700000500|0|");
@@ -1245,7 +1250,7 @@ static void test_door_c5_context_items(void)
     assert(has_line(0, "Pinned Paint") && side_index("Paint") < lobby);      /* the pinned room comes first */
     assert(strstr(prefs_sets, "pinnedChannels\tPaint\n"));                  /* TS prefsSender saves the pin */
     assert(has_line(0, "Archive requested for Paint"));
-    assert(M.lines[M.nlines - 1].tone != LC_ALERT);                        /* the last line is Unblock's */
+    assert(M.lines[M.nlines - 1].tone != LC_TK_ALERT);                        /* the last line is Unblock's */
     assert(st->ignore_adds == 1 && st->ignore_removes == 1);
     assert(has_line(0, "Blocked alice for you") && has_line(0, "alice is no longer hidden."));
     stop_stub();
@@ -1402,9 +1407,39 @@ static void test_door_message_formatting(void)
     start_stub();
     rc = drive(KEYS("\r" "say *slant* {red-fg}hot{/} @Tester\r"), 0);
     assert(rc == 0 && has_line("Tester", "*slant*"));              /* the event row carries the raw text */
-    assert(strstr(screen_text, "\033[0;3;49;38;5;255mslant") != 0);            /* *x*: italic in the text colour */
+    assert(strstr(screen_text, "\033[0;3;49;38;5;195mslant") != 0);            /* *x*: italic in the text colour */
     assert(strstr(screen_text, "\033[0;49;31mhot") != 0);                          /* {red-fg}: ANSI red, the tag eaten */
     assert(strstr(screen_text, "\033[0;7;49;33m@Tester") != 0);   /* own name: reversed yellow */
+    stop_stub();
+}
+
+/* View > Theme (TS theme-menu.ts): the highlight re-themes the whole door live, q or Esc puts the opened theme back,
+ * Enter keeps it and saves it through ae_set_user_theme. The board answers "Tester" for the saved theme, which is no
+ * id, so the door opens on the default uprough-neon (ink 195); neon-muted, the next row, has ink 146. */
+static const char *last_of(const char *hay, const char *needle)
+{
+    const char *p = hay, *last = 0;
+    while ((p = strstr(p, needle)) != 0) { last = p; p++; }
+    return last;
+}
+
+static void test_view_theme(void)
+{
+    const char *last146, *last195;
+    int rc;
+    start_stub();
+    rc = drive(KEYS("\t\t" "\x1b[C\x1b[C" "\x1b[B" "\r" "\x1b[B" "q" "/q\r"), 0);   /* menu bar, View, Theme; down previews; q reverts */
+    assert(rc == 0);
+    last146 = last_of(screen_text, "38;5;146m");
+    last195 = last_of(screen_text, "38;5;195m");
+    assert(last146 != 0);                                             /* the preview drew neon-muted ink */
+    assert(last195 != 0 && last195 > last146);                        /* after q the door is neon again */
+    stop_stub();
+    assert(theme_written[0] == '\0');                                 /* a revert saves nothing */
+    start_stub();
+    rc = drive(KEYS("\t\t" "\x1b[C\x1b[C" "\x1b[B" "\r" "\x1b[B" "\r" "/q\r"), 0);   /* Enter keeps the preview */
+    assert(rc == 0);
+    assert(strcmp(theme_written, "neon-muted") == 0);                 /* ae_set_user_theme reached the board with the id */
     stop_stub();
 }
 
@@ -1489,6 +1524,7 @@ int main(void)
     test_door_c6_add_note();
     test_door_d1_settings_prefs();
     test_door_message_formatting();
+    test_view_theme();
     test_door_format_picker();
     test_door_emoji_picker();
     test_door_emoji_commands();
