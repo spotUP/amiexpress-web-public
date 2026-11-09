@@ -103,7 +103,7 @@ int ui_decode_escape(const ui_key_source *src, int *pushback)
             int fin = src->next(src->ctx);
             if (fin < 0) return fin;
             if (fin != '~') { *pushback = fin; return 0; }
-            return t == '5' ? UI_KEY_F5 : 0;
+            return t == '5' ? UI_KEY_F5 : t == '7' ? UI_KEY_F6 : t == '8' ? UI_KEY_F7 : 0;
         }
         if (c == '3') return UI_KEY_DELETE;
         if (c == '5') return UI_KEY_PGUP;
@@ -170,6 +170,8 @@ int ui_key_read(const ui_key_source *src, int *pushback)
     if (c == AE_KEY_SHIFT_HOME)  return UI_KEY_SHIFT_HOME;
     if (c == AE_KEY_SHIFT_END)   return UI_KEY_SHIFT_END;
     if (c == AE_KEY_F5)          return UI_KEY_F5;
+    if (c == AE_KEY_F6)          return UI_KEY_F6;
+    if (c == AE_KEY_F7)          return UI_KEY_F7;
 
     if (c == UI_MOUSE_WAKE) return UI_KEY_MOUSE;
 

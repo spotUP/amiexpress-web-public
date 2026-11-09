@@ -545,6 +545,8 @@ export const NavigationKeyCodes = {
   SHIFT_HOME: 0x83,
   SHIFT_END: 0x84,
   F5: 0x85,
+  F6: 0x86,
+  F7: 0x87,
 } as const;
 
 /**

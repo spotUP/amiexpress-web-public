@@ -770,6 +770,12 @@ static void test_door_phase_a(void)
            && strncmp(M.view_text[4], "   Pinned by ", 13) == 0);
     drive(KEYS("\x1b"), 0);
     assert(!M.view);
+    drive(KEYS("\x87"), 0);                               /* TS server.ts F7: getPinnedMessages */
+    assert(M.view && strcmp(M.view_title, "Pinned Messages") == 0);
+    drive(KEYS("\x1b"), 0);
+    assert(!M.view);
+    drive(KEYS("\x86"), 0);                               /* TS F6: file manager, web only */
+    assert(has_line(0, "File sharing is not on Amiga yet."));
     drive(KEYS("\r" "\x06" "hello\talice\t\r"), 0);       /* TS search overlay: Ctrl+F, Tab to Username (optional), back, Enter */
     assert(M.search && M.search_field == 0);
     assert(strcmp(M.search_q, "hello") == 0 && strcmp(M.search_user, "alice") == 0);
@@ -780,7 +786,7 @@ static void test_door_phase_a(void)
     assert(st->thread_views == 1 && M.view && strcmp(M.view_title, "Thread") == 0);
     assert(strcmp(M.view_text[0], "=Original Message:") == 0 && strstr(M.view_text[1], "alice: hello there") != 0);
     stop_stub();
-    printf("  [OK] door: /pinned shows Sent and Pinned by, Ctrl+F searches with the user filter, /thread <n> opens the overlay\n");
+    printf("  [OK] door: /pinned and F7 show Sent and Pinned by, F6 says web only, Ctrl+F searches with the user filter, /thread <n> opens the overlay\n");
 }
 
 /* C1: /emoji <query> searches and /emojis [category] lists, with the TS texts and the ten-row limit. */

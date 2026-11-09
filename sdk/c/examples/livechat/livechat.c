@@ -3023,6 +3023,8 @@ static int handle_key(int key)
     if (key == UI_KEY_F2) { M.sidebar_hidden = !M.sidebar_hidden; if (M.focus == LC_FOCUS_SIDEBAR) set_focus(LC_FOCUS_INPUT); return 0; }
     if (key == UI_KEY_F3) { switch_tab(!M.side_tab); return 0; }
     if (key == UI_KEY_F4) { emoji_show(); return 0; }       /* TS server.ts F4 */
+    if (key == UI_KEY_F6) { system_line("File sharing is not on Amiga yet."); return 0; }  /* TS F6: file manager */
+    if (key == UI_KEY_F7) { pinned_typed(); return 0; }     /* TS server.ts F7: getPinnedMessages */
     if (key == UI_KEY_F5) {                                  /* TS server.ts: F5 formats the selection */
         if (!fmt_show()) system_line("Select text first (Shift+Arrow keys), then press F5 for formatting");
         return 0;

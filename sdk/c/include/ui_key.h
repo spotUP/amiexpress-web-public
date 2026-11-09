@@ -59,8 +59,10 @@ extern "C" {
 #define AE_KEY_SHIFT_RIGHT 0x82
 #define AE_KEY_SHIFT_HOME  0x83
 #define AE_KEY_SHIFT_END   0x84
-/* F5 (ESC [ 1 5 ~): the board drops other CSI function keys, so it gets a C1 byte too. */
+/* F5-F7 (ESC [ 1 5 ~, 1 7 ~, 1 8 ~): the board drops other CSI function keys, so these get C1 bytes too. */
 #define AE_KEY_F5          0x85
+#define AE_KEY_F6          0x86
+#define AE_KEY_F7          0x87
 
 #define UI_KEY_UP    1000
 #define UI_KEY_DOWN  1001
@@ -106,6 +108,9 @@ extern "C" {
 #define UI_KEY_SHIFT_END   1020
 /** F5: the board's AE_KEY_F5 byte, or ESC [ 1 5 ~ straight from a terminal. */
 #define UI_KEY_F5          1021
+/** F6, F7: the board's AE_KEY_F6/F7 bytes, or ESC [ 1 7 ~ / ESC [ 1 8 ~. */
+#define UI_KEY_F6          1022
+#define UI_KEY_F7          1023
 /* A raw 0x1E read is UI_KEY_MOUSE: Ctrl-^ collides with the wake byte while the board's mouse absorber is armed. */
 #define UI_MOUSE_WAKE 0x1E
 
