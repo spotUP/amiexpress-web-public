@@ -23,7 +23,7 @@ import type { BBSSession } from '../../index';
 import { emitterForSession } from '../../server/session-emitter-registry';
 import { doorOwnsTerminal } from '../../utils/door-owns-terminal';
 import { sanitizeChatMessage } from '../../handlers/chat/sanitize-message';
-import { ChatApiError, ChatClient, chatTarget } from './chat-client';
+import { ChatApiError, ChatClient, chatTarget, isChatRoomKind } from './chat-client';
 import type { ChatTextReply } from './chat-client';
 import { renderMessageLine, renderSystemLine, splitSubFields } from './ansi-render';
 
@@ -281,6 +281,8 @@ interface Payload {
   user?: string;
   username?: string;
   isPublic?: boolean;
+  /** Room type sent with room:create: text, voice or art. */
+  kind?: string;
 }
 
 async function resolveRoom(st: CallerState, sid: string, p: Payload): Promise<string> {
@@ -346,14 +348,17 @@ async function dispatch(socket: { emit: (e: string, ...a: unknown[]) => unknown 
             isPublic: r.visibility === 'public',
             memberCount: Number(r.members) || 0,
             owner: r.owner,
+            // A hub from before room types sends no kind: every room was text.
+            kind: isChatRoomKind(r.kind) ? r.kind : 'text',
           })),
         });
         return;
       }
       case 'room:create': {
         const name = (p.roomName ?? p.room ?? '').trim();
-        const made = await st.client.createRoom(sid, name, p.topic, p.isPublic === false ? 'private' : 'public');
-        socket.emit('room:created', { roomId: made.id, roomName: made.name });
+        const kind = isChatRoomKind(p.kind) ? p.kind : undefined;
+        const made = await st.client.createRoom(sid, name, p.topic, p.isPublic === false ? 'private' : 'public', kind);
+        socket.emit('room:created', { roomId: made.id, roomName: made.name, kind: made.kind ?? kind ?? 'text' });
         return;
       }
       case 'room:topic':

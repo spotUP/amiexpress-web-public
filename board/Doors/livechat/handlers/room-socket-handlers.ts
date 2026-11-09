@@ -1,11 +1,12 @@
 import { settings } from '../settings';
 import { T } from '../door-theme';
+import { isRoomKind } from '../commands/chan-admin';
 
 export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: number, un: string, nid: number, ps: any, ucl: () => void, uut: () => void, usb: () => void, asm: (m: string) => void, aa: (a: string) => void, aud: any, hl: () => void, sc: (s: any, c: string) => void, setCrl: (value: string) => void, smd: (t: string, cb?: () => void) => void, ib: any, s: any) {
   sock.on('room:list', (d: any) => {
     const rs = Array.isArray(d?.rooms) ? d.rooms : [];
     if (rs.length > 0) {
-      st.channels = rs.map((r: any) => ({ id: r.room_id || r.roomId || r.room_name || r.roomName, name: r.room_name || r.roomName, displayName: '#' + (r.room_name || r.roomName), topic: r.topic || '', type: r.is_public !== false ? 'public' : 'private', createdBy: r.created_by_username || 'system', createdAt: new Date(r.created_at || Date.now()), memberCount: r.member_count || 0, unreadCount: 0 }));
+      st.channels = rs.map((r: any) => ({ id: r.room_id || r.roomId || r.room_name || r.roomName, name: r.room_name || r.roomName, displayName: '#' + (r.room_name || r.roomName), topic: r.topic || '', type: r.is_public !== false ? 'public' : 'private', kind: isRoomKind(r.kind) ? r.kind : 'text', createdBy: r.created_by_username || 'system', createdAt: new Date(r.created_at || Date.now()), memberCount: r.member_count || 0, unreadCount: 0 }));
       ucl();
       usb();
       asm(`Found ${rs.length} room${rs.length === 1 ? '' : 's'}`);
@@ -63,7 +64,7 @@ export function setupRoomHandlers(sock: any, st: any, ou: Map<any, any>, uid: nu
   sock.on('room:left', (d: any) => { sc(st, ''); setCrl(''); st.currentRoomMotd = null; ucl(); usb(); asm(`Left ${d.roomName}`); });
 
   sock.on('room:created', (d: any) => {
-    st.channels.push({ id: d.roomId, name: d.roomName, displayName: '#' + d.roomName, topic: d.topic || '', type: d.isPublic ? 'public' : 'private', createdBy: un, createdAt: new Date(), memberCount: 1, unreadCount: 0 });
+    st.channels.push({ id: d.roomId, name: d.roomName, displayName: '#' + d.roomName, topic: d.topic || '', type: d.isPublic ? 'public' : 'private', kind: isRoomKind(d.kind) ? d.kind : 'text', createdBy: un, createdAt: new Date(), memberCount: 1, unreadCount: 0 });
     ucl();
     asm(`Room "#${d.roomName}" created!`);
     aa(`Created #${d.roomName}`);

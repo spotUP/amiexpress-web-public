@@ -11,6 +11,8 @@ export interface Channel {
   displayName: string;
   topic: string;
   type: ChannelType;
+  /** Hub room type chosen at /create: text, voice or art. Absent = text. */
+  kind?: 'text' | 'voice' | 'art';
   category?: string;
   createdBy: string;
   createdAt: Date;

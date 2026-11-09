@@ -113,6 +113,7 @@ import { replyCmd, threadCmd, editCmd } from './commands/msg-thread';
 import { setupSearchListeners, searchMessages, cleanupSearchListeners } from './handlers/search-handlers';
 import { createSearchOverlay } from './ui/search-overlay';
 import { searchCmd } from './commands/search';
+import { ROOM_KINDS, ROOM_KIND_LABELS } from './commands/chan-admin';
 import { kickCmd, banCmd, unbanCmd, muteCmd, unmuteCmd } from './commands/moderation';
 import { createDialogHelpers } from './ui/dialog-helpers';
 import { handleCommandActions } from './handlers/command-execution-handlers';
@@ -916,6 +917,8 @@ export async function createApp(session: DoorSession) {
       if (state.currentChannel) socket.emit('room:leave');
       socket.emit('room:join', { roomName: channel.name });
       voiceChannel.hideGrid(); // Hide video grid when viewing text
+      // An Art room is a drawing channel: joining it opens the canvas.
+      if (isDrawingChannel(channel.name)) { enterDrawingMode(channel.name); return; }
     } else {
       // Click on the channel we're already in. Two meaningful actions:
       //   1. If the video grid is covering the chat (we're in voice),
@@ -1458,7 +1461,7 @@ export async function createApp(session: DoorSession) {
   // ========== POPUP DIALOGS ==========
   // Note: Dialog widgets (Message, Prompt, Question) have built-in fixed heights.
   // Don't pass height: 'shrink' as it breaks nested element rendering.
-  const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox,
+  const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog, showChoiceDialog } = createDialogs(screen, inputBox,
     // Without this the SDK falls back to its own cyan/green/yellow rules
     // and the dialogs are the one part of the door a theme never
     // reached (sysop: "livechat doesnt look themed at all").
@@ -2761,7 +2764,9 @@ export async function createApp(session: DoorSession) {
       }
       return false;
     },
-    sendRoomLine
+    sendRoomLine,
+    // /create asks for the channel type (sysop 2026-11-09): Text first.
+    (cb) => showChoiceDialog('Channel type', ROOM_KINDS.map(k => ROOM_KIND_LABELS[k]), (i) => cb(i === null ? null : ROOM_KINDS[i]))
   );
   inputBox.on('submit', (value: string) => { asyncSubmitHandler(value); });
 

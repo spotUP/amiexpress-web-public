@@ -12,7 +12,10 @@ export function createDrawingCanvas(s: Screen, sock: any, st: any, cl: any, tb: 
   let ldx = -1;
   let ldy = -1;
 
-  const idc = (cn: string): boolean => dcs.has(cn) || cn.startsWith('art:');
+  // A drawing channel: /draw made it, it carries the old art: prefix, or the
+  // hub stores it as an Art room (picked at /create).
+  const idc = (cn: string): boolean => dcs.has(cn) || cn.startsWith('art:')
+    || (Array.isArray(st?.channels) && st.channels.some((c: any) => c.kind === 'art' && (c.name === cn || c.id === cn)));
 
   const canvas = blessed.canvas({ parent: s, top: MH, left: SW, right: 0, bottom: SH + IH, label: ' Drawing [Resize: Corner] - Click/Drag | C: Colors | X: Clear | ESC: Exit ', border: { type: 'line' }, hidden: true, mouse: true, fillChar: '\u2588', clearChar: ' ', ch: ' ', style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER } } });
 

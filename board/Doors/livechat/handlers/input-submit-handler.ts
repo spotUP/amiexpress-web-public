@@ -17,6 +17,8 @@ import { channelsToShow } from '../core/state';
 import { settings } from '../settings';
 import { saveSettings, prefsAsCheckboxes } from '../overlays/settings-save';
 import { prefsSender } from '../core/prefs-sync';
+import { isRoomKind } from '../commands/chan-admin';
+import type { RoomKind } from '../commands/chan-admin';
 
 export function createSubmitHandler(
   socket: Socket,
@@ -59,9 +61,14 @@ export function createSubmitHandler(
   clearChatLog: () => void,
   messagePicker?: MessagePicker,
   tryJoinVoiceChannel?: (channelName: string) => boolean,
-  sendRoomLine?: (text: string, replyTo?: string) => void
+  sendRoomLine?: (text: string, replyTo?: string) => void,
+  /** Asks which kind of channel /create makes; null = cancelled. */
+  pickRoomKind?: (cb: (kind: RoomKind | null) => void) => void
 ) {
   return async (value: string) => {
+    // Set when this submit opened a picker: the picker owns focus, so the
+    // unified clear below must not hand it back to the input box.
+    let pickerOpened = false;
     try {
       // Hide command suggestions on submit
       hideCommandSuggestions();
@@ -144,13 +151,24 @@ export function createSubmitHandler(
         }
 
         if (cmdName === 'create' && r.data?.name) {
-          socket.emit('room:create', {
-            roomName: r.data.name,
-            topic: r.data.topic || '',
-            isPublic: !r.data.isPrivate,
-            isInviteOnly: r.data.isInviteOnly || r.data.isPrivate,
-            motd: r.data.motd || null,
+          const d = r.data;
+          const create = (kind: RoomKind) => socket.emit('room:create', {
+            roomName: d.name,
+            topic: d.topic || '',
+            isPublic: !d.isPrivate,
+            isInviteOnly: d.isInviteOnly || d.isPrivate,
+            motd: d.motd || null,
+            kind,
           });
+          if (isRoomKind(d.kind)) create(d.kind);
+          else if (pickRoomKind) {
+            // Every new channel gets a type: ask before it reaches the hub.
+            pickerOpened = true;
+            pickRoomKind((kind) => {
+              if (kind) { addSystemMessage(`Creating #${d.name}...`); create(kind); }
+              else addSystemMessage(`#${d.name} was not created.`);
+            });
+          } else create('text');
         }
 
         if (cmdName === 'who' || cmdName === 'users') {
@@ -367,7 +385,7 @@ export function createSubmitHandler(
       if ((inputBox as any).setContent) (inputBox as any).setContent('');
       if ((inputBox as any)._invalidateCoords) (inputBox as any)._invalidateCoords();
       
-      inputBox.focus();
+      if (!pickerOpened) inputBox.focus();
       screen.render();
     } catch (error) {
       addSystemMessage(`{${T.alert}-fg}Error: ${error instanceof Error ? error.message : 'Unknown error'}{/${T.alert}-fg}`);

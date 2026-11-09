@@ -1658,6 +1658,54 @@ export function createDialogs(
     });
   }
 
+  // A pick-one list: Enter or a click picks the highlighted entry, Escape
+  // cancels. One list is reused for every ask.
+  const choiceDialog = blessed.list({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 30,
+    height: 5,
+    border: { type: 'line' },
+    hidden: true,
+    mouse: true,
+    keys: true,
+    vi: true,
+    interactive: true,
+    tags: true,
+    zIndex: 600, // Above overlay
+    style: { ...surface, border: { fg: rule || 'cyan' }, selected: { fg: surface.bg, bg: surface.fg } }
+  } as any);
+  let choiceDone: ((index: number | null) => void) | null = null;
+  function finishChoice(index: number | null) {
+    const done = choiceDone;
+    choiceDone = null;
+    if (!done) return;
+    choiceDialog.hide();
+    modalOverlay.hide();
+    if (returnFocusElement) returnFocusElement.focus();
+    screen.render();
+    done(index);
+  }
+  choiceDialog.on('select', (_item: unknown, index: number) => finishChoice(index));
+  choiceDialog.key(['escape'], () => finishChoice(null));
+
+  /** Pick one of `choices`; the callback gets its index, or null on Escape. */
+  function showChoiceDialog(title: string, choices: string[], callback: (index: number | null) => void, selected = 0) {
+    if (choiceDone) finishChoice(null);
+    choiceDone = callback;
+    choiceDialog.setLabel(` ${title} `);
+    choiceDialog.setItems(choices);
+    choiceDialog.height = choices.length + 2;
+    choiceDialog.select(selected);
+    modalOverlay.show();
+    modalOverlay.setFront();
+    choiceDialog.show();
+    choiceDialog.setFront();
+    choiceDialog.focus();
+    screen.render();
+  }
+
   return {
     modalOverlay,
     showModal,
@@ -1665,9 +1713,11 @@ export function createDialogs(
     messageDialog,
     promptDialog,
     questionDialog,
+    choiceDialog,
     showMessageDialog,
     showPromptDialog,
-    showConfirmDialog
+    showConfirmDialog,
+    showChoiceDialog
   };
 }
 

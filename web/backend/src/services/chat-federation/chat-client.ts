@@ -69,8 +69,13 @@ export interface ChatTextReply {
   rows: Array<Record<string, string>>;
 }
 
+/** The hub's room types (amiexpress-doorserver contract/chat-types.ts CHAT_ROOM_KINDS). */
+export const CHAT_ROOM_KINDS = ['text', 'voice', 'art'] as const;
+export type ChatRoomKind = (typeof CHAT_ROOM_KINDS)[number];
+export const isChatRoomKind = (v: unknown): v is ChatRoomKind => (CHAT_ROOM_KINDS as readonly unknown[]).includes(v);
+
 export const CHAT_TEXT_COLUMNS = {
-  ROOMS: ['id', 'name', 'topic', 'visibility', 'members', 'owner'],
+  ROOMS: ['id', 'name', 'topic', 'visibility', 'members', 'owner', 'kind'],
   MEMBERS: ['user', 'sysop', 'op', 'roleColor', 'roleName', 'status', 'statusText'],
   HISTORY: ['seq', 'id', 'user', 'at', 'replyTo', 'threadId', 'roleColor', 'text'],
   EVENTS: ['seq', 'type', 'room', 'user', 'ref', 'at', 'roleColor', 'text', 'replyTo'],
@@ -219,11 +224,13 @@ export class ChatClient {
   rooms(sid: string, mine = false): Promise<ChatTextReply> {
     return this.text(`/rooms.txt${mine ? '?mine=1' : ''}`, sid, 'ROOMS');
   }
-  createRoom(sid: string, name: string, topic?: string, visibility?: 'public' | 'private') {
-    return this.json<{ id: string; name: string; visibility: string }>('POST', '/rooms', sid, {
+  /** `kind` is the room's type on the hub: text (default), voice or art. */
+  createRoom(sid: string, name: string, topic?: string, visibility?: 'public' | 'private', kind?: ChatRoomKind) {
+    return this.json<{ id: string; name: string; visibility: string; kind: ChatRoomKind }>('POST', '/rooms', sid, {
       name,
       topic,
       visibility,
+      kind,
     });
   }
   join(sid: string, roomId: string): Promise<ChatJoinReply> {

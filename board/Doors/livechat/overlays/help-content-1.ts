@@ -51,7 +51,8 @@ ${voice ? HELP_VOICE_SECTION : ''}{bold}{${T.ok}-fg}--- COMMANDS ---{/${T.ok}-fg
 {${T.accent}-fg}Room Commands:{/${T.accent}-fg}
   /join <room>      Join a channel
   /leave            Leave current channel
-  /create <name>    Create new channel
+  /create <name>    Create a channel; asks Text, Voice or Art
+                    (--type text|voice|art skips the question)
   /topic <text>     Set channel topic
   /rooms            List all rooms
 

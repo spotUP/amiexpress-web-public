@@ -54,7 +54,8 @@ export function buildSidebarItems(input: BuilderInput): BuilderOutput {
   items.push(`{${T.accent}-fg}{bold}TEXT CHANNELS{/bold}{/${T.accent}-fg}`);
   channelItems.push({ id: '', name: '', type: 'header' });
 
-  channelsToShow.forEach(ch => {
+  // Voice rooms list under VOICE CHANNELS, not here.
+  channelsToShow.filter(ch => ch.kind !== 'voice').forEach(ch => {
     const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
     const isActive = isCurrentChannel(ch.id, ch.name);
     const hasUnread = ch.unreadCount && ch.unreadCount > 0;
@@ -69,7 +70,9 @@ export function buildSidebarItems(input: BuilderInput): BuilderOutput {
     else { color = `{${T.dim}-fg}`; endColor = `{/${T.dim}-fg}`; }
 
     const arrow = isExpanded ? 'v' : '>';
-    items.push(color + arrow + ' # ' + ch.name + unread + endColor);
+    // An Art room opens the drawing canvas; [A] says so before the click.
+    const mark = ch.kind === 'art' ? ' [A] ' : ' # ';
+    items.push(color + arrow + mark + ch.name + unread + endColor);
     channelItems.push({ id: ch.id, name: ch.name, type: 'text' });
 
     if (isExpanded && isActive) {
@@ -116,7 +119,15 @@ export function buildSidebarItems(input: BuilderInput): BuilderOutput {
   items.push(`{${T.accent}-fg}{bold}VOICE CHANNELS{/bold}{/${T.accent}-fg}`);
   channelItems.push({ id: '', name: '', type: 'header' });
 
-  const voiceChannels = voiceChannelService.getVoiceChannels();
+  // The hub's Voice rooms are the voice channels; the service adds who is in
+  // each one. A room the service already knows is listed once.
+  const known: any[] = voiceChannelService.getVoiceChannels();
+  const voiceChannels = [
+    ...known,
+    ...channelsToShow
+      .filter(ch => ch.kind === 'voice' && !known.some((vc: any) => vc.id === ch.id))
+      .map(ch => ({ id: ch.id, name: ch.name, participants: [] })),
+  ];
   if (voiceChannels.length === 0) {
     const isInVoice = voiceChannelService.isInVoiceChannel();
     const icon = isInVoice ? `{${T.ok}-fg}[V]{/${T.ok}-fg}` : `{${T.dim}-fg}[V]{/${T.dim}-fg}`;

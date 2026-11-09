@@ -99,3 +99,73 @@ export async function roomCommandsEmitAndSettingsCommandsChangePrefs(): Promise<
     fire('disconnect', 'transport close');
   }
 }
+
+/**
+ * Every new channel gets a type (sysop 2026-11-09): /create with no --type
+ * opens the "Channel type" picker, the pick travels on room:create as kind,
+ * Escape creates nothing, and --type skips the picker.
+ */
+export async function createAsksForTheChannelType(): Promise<void> {
+  const { app, emits, fire, settle } = await openDoor();
+  try {
+    const picker = () => elements(app.screen).find(e => e.type === 'list' && String(e.getLabel?.() ?? '').includes('Channel type'));
+    await typeLine(app, settle, '/create #paint Pixels only');
+    const list = picker();
+    assert.ok(list && list.visible, '/create must open the channel type picker');
+    assert.deepStrictEqual(list.items.map((i: any) => (typeof i === 'string' ? i : i.getContent())), ['Text', 'Voice', 'Art']);
+    assert.strictEqual(emits.filter(e => e.event === 'room:create').length, 0, 'nothing is created before a type is picked');
+    list.emit('keypress', null, { name: 'down', full: 'down' });
+    await settle(); // the list drops navigation keys under 50 ms apart
+    list.emit('keypress', null, { name: 'down', full: 'down' });
+    list.emit('keypress', '\r', { name: 'enter', full: 'enter' });
+    await settle();
+    assert.deepStrictEqual(emits.find(e => e.event === 'room:create')?.payload,
+      { roomName: 'paint', topic: 'Pixels only', isPublic: true, isInviteOnly: undefined, motd: null, kind: 'art' });
+    assert.ok(!picker()?.visible, 'the picker closes after the pick');
+
+    await typeLine(app, settle, '/create #nope');
+    picker()!.emit('keypress', null, { name: 'escape', full: 'escape' });
+    await settle();
+    assert.strictEqual(emits.filter(e => e.event === 'room:create').length, 1, 'Escape creates nothing');
+
+    await typeLine(app, settle, '/create #talk --type voice');
+    assert.strictEqual(emits.filter(e => e.event === 'room:create').pop()?.payload.kind, 'voice', '--type skips the picker');
+  } finally {
+    fire('disconnect', 'transport close');
+  }
+}
+
+/**
+ * The hub's room type decides where a room sits (sysop 2026-11-09): a Voice
+ * room lists under VOICE CHANNELS, an Art room shows [A] and opens the drawing
+ * canvas when joined, a room from a hub without types stays a text channel.
+ */
+export async function roomKindPlacesTheRoomInTheSidebar(): Promise<void> {
+  const { app, emits, fire, settle } = await openDoor();
+  try {
+    fire('room:list', { rooms: [
+      { room_id: 'r1', room_name: 'main', is_public: true, member_count: 1 },
+      { room_id: 'r2', room_name: 'paint', is_public: true, member_count: 1, kind: 'art' },
+      { room_id: 'r3', room_name: 'talk', is_public: true, member_count: 1, kind: 'voice' },
+    ] });
+    await settle();
+    const list = elements(app.screen).find(e => e.type === 'list' && e.items?.some((i: any) => String(i).includes('TEXT CHANNELS')));
+    assert.ok(list, 'the sidebar channel list must exist');
+    const rows: string[] = list.items.map((i: any) => String(i).replace(/\{[^}]*\}/g, ''));
+    const text = rows.indexOf('TEXT CHANNELS');
+    const voice = rows.indexOf('VOICE CHANNELS');
+    const at = (needle: string) => rows.findIndex(r => r.includes(needle));
+    assert.ok(text >= 0 && voice > text, `both sections must exist: ${JSON.stringify(rows)}`);
+    assert.ok(at('# main') > text && at('# main') < voice, 'a room without a type is a text channel');
+    assert.ok(at('[A] paint') > text && at('[A] paint') < voice, 'an Art room is marked [A] among the text channels');
+    assert.ok(at('talk') > voice, 'a Voice room lists under VOICE CHANNELS');
+
+    list.emit('select', list.items[at('[A] paint')], at('[A] paint'));
+    await settle();
+    assert.strictEqual(emits.filter(e => e.event === 'room:join').pop()?.payload.roomName, 'paint');
+    const canvas = elements(app.screen).find(e => String(e.getLabel?.() ?? '').includes('Drawing: #paint'));
+    assert.ok(canvas && canvas.visible, 'joining an Art room opens the drawing canvas');
+  } finally {
+    fire('disconnect', 'transport close');
+  }
+}
