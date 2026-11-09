@@ -135,7 +135,7 @@ typedef struct {
     int modal;
     char modal_title[24];          /* "Error", or the prompt's question */
     char modal_text[96];
-    char prompt[48];
+    char prompt[160];
     int prompt_len;
     int search;                    /* the search overlay (TS ui/search-overlay.ts on the SDK SearchModal) */
     int search_field;              /* 0 Query, 1 "Username (optional)"; Tab cycles the two (search-modal.ts) */

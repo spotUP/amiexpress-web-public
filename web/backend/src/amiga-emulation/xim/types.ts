@@ -389,6 +389,9 @@ export enum XIMCommand {
    */
   AEW_CHARSET = 11100,
 
+  /** This board's own: a 68K door adds a sysop note about a user - xim/user-note.ts. */
+  AEW_USERNOTE = 11200,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }

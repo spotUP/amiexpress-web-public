@@ -12,7 +12,6 @@
  * This API exposes equivalent functionality in a modern JavaScript/TypeScript interface.
  */
 
-import { appendUserNote } from '../utils/user-notes.util';
 import { Socket } from 'socket.io';
 import { clearScreenFor } from '../utils/ansi.util';
 import { joinChatRoom, leaveChatRoom, sendChatRoomMessage, createChatRoom, listChatRooms, type JoinedRoom, type CreatedRoom, type NewRoomOptions } from './door-chat-rooms';
@@ -25,7 +24,7 @@ import {
 import { doorSendMessage, doorPostMessage } from './door-messages';
 import { doorEmitCustomEvent, doorAchievement, doorNotify, doorNotifications, doorAchievements } from './door-events';
 import { doorRequestArchiveUpload, doorInstallDoor, doorGrantBeebRomAccess } from './door-archive';
-import { doorJoinConference, doorListConferences, doorGetSystemInfo, doorGetNodes } from './door-board';
+import { doorJoinConference, doorListConferences, doorGetSystemInfo, doorGetNodes, doorAddUserNote } from './door-board';
 import { doorExecuteCommand, doorGetDoorList, doorDeleteDoor, doorSetDoorEnabled } from './door-commands';
 import {
   doorIsKeyPressed, doorGetPressedKeys, doorOnKeyDown, doorOnKeyUp, doorOnKeyEvent, doorHotkey, doorSetModemSpeed,
@@ -961,13 +960,7 @@ console.log('[BBSApi] Mouse events disabled');
    * the user is unknown or has no slot.
    */
   async addUserNote(username: string, text: string): Promise<boolean> {
-    const target = await db.getUserByUsername(username);
-    if (!target?.slotNumber) return false;
-    // With no caller the note is the board's own: signed with the sysop name
-    // the board is configured with (getSystemInfo), not a literal account
-    // name - there is no account called sysop on the live board (2026-09-28).
-    const author = this.session?.user?.username ?? (await this.getSystemInfo()).sysopName;
-    return appendUserNote(target.slotNumber, author, text);
+    return doorAddUserNote(this.session, username, text);
   }
 
   /** See doorWriteInfoFile in ./door-files. */

@@ -208,7 +208,10 @@ typedef enum {
     /* The caller's wire charset ("utf-8", "iso-8859-1", "cp437"). Writing
        "utf-8" declares this door's text bytes UTF-8 for the rest of the run;
        a door that never writes it is byte-identical to before. */
-    AE_FIELD_CHARSET        = 11100  /* AEW_CHARSET */
+    AE_FIELD_CHARSET        = 11100, /* AEW_CHARSET */
+
+    /* A sysop note about a user (AEW_USERNOTE); see ae_usernote.h. */
+    AE_FIELD_USERNOTE       = 11200  /* AEW_USERNOTE */
 } ae_field;
 
 /**

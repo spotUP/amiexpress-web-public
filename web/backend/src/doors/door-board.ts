@@ -9,6 +9,7 @@ import type { BBSSession } from '../index';
 import type { BBSConference, BBSNode, BBSSystemInfo } from './bbs-api-types';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
+import { appendUserNote } from '../utils/user-notes.util';
 
 
 /**
@@ -87,4 +88,17 @@ console.error('[BBSApi] Error getting nodes:', error);
       }
     ];
   }
+}
+
+/**
+ * Append a sysop note about `username` (the store the account editor's `*` User
+ * Notes view reads). Author = the calling session's user, else the sysop name
+ * the board is configured with. ONE rule for BBSApi.addUserNote (TS doors) and
+ * AEW_USERNOTE (68K doors, xim/user-note.ts). False: unknown user / no slot / save failed.
+ */
+export async function doorAddUserNote(session: BBSSession | null | undefined, username: string, text: string): Promise<boolean> {
+  const target = await db.getUserByUsername(username);
+  if (!target?.slotNumber) return false;
+  const author = session?.user?.username ?? (await doorGetSystemInfo()).sysopName;
+  return appendUserNote(target.slotNumber, author, text);
 }

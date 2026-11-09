@@ -115,10 +115,18 @@ static int mouse_reply(char *out)
     return sprintf(out, "P\t%d\t%d\t0", c + 1, r);
 }
 
+static char note_request[256];   /* the last AEW_USERNOTE request */
+static const char *note_reply = "OK"; /* "" = the board cannot take notes */
+
 static int board(void *ctx, int field, const char *request, char *out, int cap)
 {
     (void)ctx; (void)cap;
     out[0] = '\0';
+    if (field == AE_FIELD_USERNOTE) {
+        strncpy(note_request, request, sizeof note_request - 1);
+        strcpy(out, note_reply);
+        return (int)strlen(out);
+    }
     if (field != AE_FIELD_SCREEN) return 0;
     if (strcmp(request, "SIZE") == 0) { strcpy(out, "80\t25"); return 4; }
     if (strcmp(request, "MOUSE ON B") == 0) { mouse_armed++; strcpy(out, "OK"); return 2; }
@@ -755,6 +763,19 @@ static void test_door_emoji_commands(void)
     printf("  [OK] door: /emoji <query> and /emojis [category] print the TS lists\n");
 }
 
+/* Web-only TS views (voice, mic, draw, files) answer with "not on Amiga yet", never "Unknown command". */
+static void test_door_web_only_commands(void)
+{
+    start_stub();
+    drive(KEYS("\r" "/voice\r" "/vc join x\r" "/mic\r" "/deafen\r" "/undeaf\r" "/draw\r" "/art\r" "/files\r" "/share\r"), 0);
+    assert(has_line(0, "Voice is not on Amiga yet."));
+    assert(has_line(0, "Drawing is not on Amiga yet."));
+    assert(has_line(0, "File sharing is not on Amiga yet."));
+    assert(!has_line(0, "Unknown command. Type /help for help."));
+    stop_stub();
+    printf("  [OK] door: voice, mic, draw and files say they are not on Amiga yet\n");
+}
+
 /* B2: delete by default takes the caller's last line; a kick of the caller leaves the room; low levels are refused. */
 static void test_door_delete_and_kicked(void)
 {
@@ -1093,6 +1114,30 @@ static void test_door_c5_context_items(void)
 
 /* R1a (sysop 2026-11-08): dragging the chat scrollbar thumb scrolls the chat. A press on the track
  * jumps there, held motion follows, release ends it; a bare hover afterwards does not scroll. */
+/* C6: the user menu's Add Note prompts "Note about X:", trims the text, and sends it to the board's
+ * AEW_USERNOTE; OK, NO and no reply give the TS context-menus.ts lines. */
+static void test_door_c6_add_note(void)
+{
+    static const int script[] = { MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END };
+    static const char *const replies[] = { "OK", "NO", "" };
+    static const char *const lines[] = { "Note saved for alice.", "Could not save note for alice.", "Notes are unavailable." };
+    int i;
+    for (i = 0; i < 3; i++) {
+        start_stub();
+        note_request[0] = '\0'; note_reply = replies[i];
+        ms_items[0] = "Add Note"; ms_item_n = 0;
+        mouse_script = script; mouse_step = 0;
+        drive(KEYS("\r" "\x1e\x1e" "  nice person  \r"), 0);
+        mouse_script = 0;
+        assert(ms_item_n == 1);
+        assert(strcmp(note_request, "NOTE\talice\tnice person") == 0);
+        assert(has_line(0, lines[i]));
+        stop_stub();
+    }
+    note_reply = "OK";
+    printf("  [OK] door: Add Note sends NOTE alice and says saved, refused or unavailable\n");
+}
+
 static void test_door_scrollbar_drag(void)
 {
     static const int script[] = { MS_FILL, MS_BAR_PRESS, MS_END, MS_BAR_DRAG, MS_END,     /* FILL and CHECK end their own wake */
@@ -1244,10 +1289,12 @@ int main(void)
     test_door_b4_ignore();
     test_door_b4_user_menu();
     test_door_c5_context_items();
+    test_door_c6_add_note();
     test_door_message_formatting();
     test_door_format_picker();
     test_door_emoji_picker();
     test_door_emoji_commands();
+    test_door_web_only_commands();
     test_door_no_config();
     test_config_save();
     test_register();

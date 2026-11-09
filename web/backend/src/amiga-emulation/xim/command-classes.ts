@@ -54,6 +54,8 @@ export function isIOCommand(command: number): boolean {
     // catalogue file - both asynchronous, both need ASYNC_OUTPUT_COMMANDS too.
     XIMCommand.AEW_SCREEN,
     XIMCommand.AEW_MENU,
+    // AEW_USERNOTE looks the user up and writes the notes file - async.
+    XIMCommand.AEW_USERNOTE,
     // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
     // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
   ];

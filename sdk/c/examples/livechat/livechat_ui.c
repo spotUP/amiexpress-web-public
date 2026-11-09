@@ -1318,9 +1318,12 @@ static void draw_modal(ui_cells *c, const lc_model *m, int *cr, int *cc)
         if (w > c->cols) w = c->cols;
         centre(c, top + 2, left + 1, w - 2, m->modal_title);
         ui_cells_text(c, top + 4, left + 3, "> ", 2);
-        ui_cells_text(c, top + 4, left + 5, m->prompt, w - 8);
-        *cr = top + 4;
-        *cc = left + 5 + m->prompt_len;
+        {                                                    /* a long line scrolls: the tail and the cursor stay in the field */
+            int field = w - 9, from = m->prompt_len > field ? m->prompt_len - field : 0;
+            ui_cells_text(c, top + 4, left + 5, m->prompt + from, field + 1);
+            *cr = top + 4;
+            *cc = left + 5 + m->prompt_len - from;
+        }
         return;
     }
     ui_cells_modal(c, 12, w, LC_ACCENT, "Message", LC_INK, &top, &left);

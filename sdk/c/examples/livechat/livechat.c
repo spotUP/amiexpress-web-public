@@ -47,6 +47,7 @@
 #include "ae_net.h"
 #include "ae_request.h"
 #include "ae_session.h"
+#include "ae_usernote.h"
 #include "ui_ansi.h"
 #include "ui_cells.h"
 #include "ui_input.h"
@@ -112,8 +113,9 @@ static int rooms_count;
 static char pending_room[40];
 static const char *pending_vis = "public";
 
-enum { PROMPT_JOIN, PROMPT_CREATE };
+enum { PROMPT_JOIN, PROMPT_CREATE, PROMPT_NOTE };
 static int prompt_kind;
+static char note_target[32];                               /* PROMPT_NOTE: who the note is about */
 
 static int door_key(void *ctx) { IGNORE(ctx); return ae_key(); }
 static int door_pending(void *ctx) { IGNORE(ctx); return ae_input_pending(); }
@@ -424,6 +426,22 @@ static void open_prompt(int kind, const char *question)
     copy(M.modal_title, sizeof M.modal_title, question);
     M.prompt[0] = '\0';
     M.prompt_len = 0;
+}
+
+/* TS context-menus.ts Add Note: the board stores the note (BBSApi.addUserNote, here AEW user-note). */
+static void note_typed(const char *text)
+{
+    char line[96];
+    char note[sizeof M.prompt];
+    int r, n;
+    while (*text == ' ') text++;                            /* TS (val || '').trim() */
+    copy(note, sizeof note, text);
+    for (n = (int)strlen(note); n > 0 && note[n - 1] == ' '; ) note[--n] = '\0';
+    if (note[0] == '\0') return;
+    r = ae_user_note(note_target, note);
+    if (r > 0) { sprintf(line, "Note saved for %.30s.", note_target); system_line(line); }
+    else if (r == 0) { sprintf(line, "Could not save note for %.30s.", note_target); alert_line(line); }
+    else alert_line("Notes are unavailable.");
 }
 
 static void open_help(void)
@@ -2064,6 +2082,12 @@ static int run_command(const char *line)
     if (strcmp(cmd, "emoji") == 0) { emoji_search_typed(rest); return 0; }
     if (strcmp(cmd, "emojis") == 0) { emojis_typed(rest); return 0; }
     if (strcmp(cmd, "customemoji") == 0) { customemoji_typed(rest); return 0; }
+    /* TS commands/voice.ts, mic.ts, ui.ts open web-only views: voice, mic and video are not on
+     * Amiga yet (spot 2026-11-09); draw and files wait for their ports. */
+    if (is_cmd(cmd, "voice", "vc") || is_cmd(cmd, "deafen", "deaf") || is_cmd(cmd, "undeafen", "undeaf")
+        || strcmp(cmd, "mic") == 0) { system_line("Voice is not on Amiga yet."); return 0; }
+    if (is_cmd(cmd, "draw", "whiteboard") || strcmp(cmd, "art") == 0) { system_line("Drawing is not on Amiga yet."); return 0; }
+    if (is_cmd(cmd, "files", "file") || strcmp(cmd, "share") == 0) { system_line("File sharing is not on Amiga yet."); return 0; }
     system_line("Unknown command. Type /help for help.");
     return 0;
 }
@@ -2372,7 +2396,12 @@ static void ctx_run(const char *it)
         else if (strcmp(it, "Mute User") == 0 || strcmp(it, "Unmute User") == 0) level_toggle(nick, LV_MUTE);
         else if (strcmp(it, "Ignore") == 0 || strcmp(it, "Unignore") == 0) level_toggle(nick, LV_IGNORE);
         else if (strcmp(it, "Block") == 0 || strcmp(it, "Unblock") == 0) level_toggle(nick, LV_BLOCK);
-        else not_yet(it);                /* Add Note (no doorserver note route) */
+        else if (strcmp(it, "Add Note") == 0) {          /* TS showPromptDialog("Note about X:") then bbs.addUserNote */
+            char q[48];
+            copy(note_target, sizeof note_target, nick);
+            sprintf(q, "Note about %.30s:", nick);
+            open_prompt(PROMPT_NOTE, q);
+        }
     } else if (M.ctx_kind == LC_CTX_CHAT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
         if (strcmp(it, "Mark Unread") == 0) {                   /* TS: acts on the current room, not the line */
@@ -2665,7 +2694,9 @@ static int handle_key(int key)
             copy(text, sizeof text, M.prompt);
             M.modal = LC_MODAL_NONE;
             if (text[0] == '\0') return 0;
-            if (prompt_kind == PROMPT_JOIN) join_typed(text); else create_typed(text, "public");
+            if (prompt_kind == PROMPT_JOIN) join_typed(text);
+            else if (prompt_kind == PROMPT_NOTE) note_typed(text);
+            else create_typed(text, "public");
             return 0;
         }
         if ((key == 8 || key == 127) && M.prompt_len > 0) { M.prompt[--M.prompt_len] = '\0'; return 0; }

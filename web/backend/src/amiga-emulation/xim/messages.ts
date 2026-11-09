@@ -506,6 +506,7 @@ console.log(`[XIMMessageParser] writeCommand: msgAddr=0x${msgAddr.toString(16)} 
       [XIMCommand.AEW_MENU]: 'AEW_MENU',
       [XIMCommand.AEW_DISPLAYMODE]: 'AEW_DISPLAYMODE',
     [XIMCommand.AEW_CHARSET]: 'AEW_CHARSET',
+      [XIMCommand.AEW_USERNOTE]: 'AEW_USERNOTE',
       [XIMCommand.SV_NEWMSG]: 'SV_NEWMSG',
       [XIMCommand.SV_UNICONIFY]: 'SV_UNICONIFY',
       [XIMCommand.SV_SYSOPLOG]: 'SV_SYSOPLOG',

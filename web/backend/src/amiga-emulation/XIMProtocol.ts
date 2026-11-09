@@ -43,6 +43,7 @@ import * as net from 'net';
 import { amigaGaps, doorOf } from './instrumentation/amiga-gaps';
 import { XIM_DOOR_COMMAND_ADDR } from './memory-map';
 import { boardScreenAnswer } from './xim/board-screen';
+import { userNoteAnswer } from './xim/user-note';
 import { menuAnswer } from './xim/menu';
 import { MouseAbsorber } from './xim/mouse-absorber';
 import { responsiveDoorGeometry } from './xim/screen-width.util';
@@ -1105,6 +1106,20 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
           // A held wipe is released so the door's next output is not swallowed.
           this.state.wipeCapture = null;
           debugLog(`[XIMProtocol] AEW_SCREEN failed: ${err instanceof Error ? err.message : 'error'}`);
+        }
+        this.messageParser.writeMessageString(msg.msgAddr, answer);
+        this.sendReply(msg, answer.length);
+        break;
+      }
+
+      /** AEW_USERNOTE (11200): a sysop note about a user - xim/user-note.ts. */
+      case XIMCommand.AEW_USERNOTE: {
+        let answer = '';
+        try {
+          answer = await userNoteAnswer(String(msg.string || ''), this.bbsSession as unknown as BBSSession);
+        } catch (err) {
+          // Empty = "this board cannot take notes". Never log the request: it carries the note text.
+          debugLog(`[XIMProtocol] AEW_USERNOTE failed: ${err instanceof Error ? err.message : 'error'}`);
         }
         this.messageParser.writeMessageString(msg.msgAddr, answer);
         this.sendReply(msg, answer.length);
