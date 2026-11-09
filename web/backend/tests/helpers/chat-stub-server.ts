@@ -65,6 +65,8 @@ export async function startChatStub(): Promise<ChatStub> {
       if (req.method === 'POST' && /^\/rooms\/[^/]+\/typing$/.test(p)) return json(200, { ok: true });
       if (/\/history\.txt$/.test(p)) return text('HISTORY|1|0|0\r\n');
       if (req.method === 'POST' && /^\/rooms\/[^/]+\/messages$/.test(p)) return json(200, { id: 'm1', seq: 1, at: 1 });
+      if (req.method === 'POST' && p === '/dm-group') return json(201, { id: 'dm1', seq: 1, threadId: 'dgstub000001' });
+      if (req.method === 'GET' && p === '/dm.txt') return text('DM|1|1|1\r\ndgstub000001|bob@OTHER,carol@OTHER|1|0\r\n');
       if (p === '/events.txt') {
         const send = () => { if (res.writableEnded) return; const rows = queue.splice(0); text(`EVENTS|1|${seq}|${rows.length}\r\n${rows.map((r) => `${r}\r\n`).join('')}`); };
         if (queue.length > 0) return send();

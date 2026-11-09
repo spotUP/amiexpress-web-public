@@ -54,6 +54,7 @@ export const FEDERATED_EVENTS: ReadonlySet<string> = new Set([
   'chat:react',
   'chat:unreact',
   'chat:dm',
+  'chat:group-dm',
   'chat:presence',
   'chat:whois',
   'chat:ignore',
@@ -77,6 +78,8 @@ interface CallerState {
   closed: boolean;
   counter: number;
   /** The caller's input buffer as the hub should see it (typing indicator). */
+  /** Group DM thread id -> the other members, from dm.txt; filled on first sight of a thread. */
+  groupPeers: Map<string, string[]>;
   typingText: string;
   typingSent: string;
   typingLastAt: number;
@@ -112,6 +115,7 @@ async function stateFor(session: BBSSession): Promise<CallerState> {
       polling: false,
       closed: false,
       counter: 0,
+      groupPeers: new Map(),
       typingText: '',
       typingSent: '',
       typingLastAt: 0,
@@ -154,6 +158,22 @@ function deliver(session: BBSSession, st: CallerState, rows: ChatTextReply['rows
   const own = st.handle.toLowerCase();
   for (const r of rows) {
     const at = Number(r.at) || Math.floor(Date.now() / 1000);
+    if (r.type === 'dm' && r.room.startsWith('dg')) {
+      const peers = st.groupPeers.get(r.room) ?? [];
+      const sent = r.user.toLowerCase() === own;
+      const others = sent ? peers : [r.user, ...peers.filter((x) => x.toLowerCase() !== r.user.toLowerCase())];
+      emitter.emit('chat:dm', {
+        threadId: r.room,
+        messageId: r.ref,
+        from: r.user,
+        participants: others,
+        message: r.text,
+        timestamp: toMs(at),
+        isGroup: true,
+        direction: sent ? 'sent' : 'received',
+      });
+      continue;
+    }
     if (r.type === 'message' || r.type === 'dm') {
       if (r.user.toLowerCase() === own) continue;
       if (ansiOk) emitter.emit('ansi-output', renderMessageLine(r.user, r.roleColor, r.text, at));
@@ -227,6 +247,19 @@ function systemText(r: Record<string, string>): string | null {
   }
 }
 
+/** Look up the members of any group DM thread not seen yet (dm.txt), so deliver can stay synchronous. */
+async function primeGroupPeers(st: CallerState, rows: ChatTextReply['rows']): Promise<void> {
+  const fresh = rows.some((r) => r.type === 'dm' && r.room.startsWith('dg') && !st.groupPeers.has(r.room));
+  if (!fresh || !st.sid) return;
+  try {
+    for (const t of (await st.client.dmThreads(st.sid)).rows) {
+      if (t.threadId.startsWith('dg')) st.groupPeers.set(t.threadId, t.peer.split(',').filter((x) => x !== ''));
+    }
+  } catch {
+    // Unknown members: the line still shows who sent it.
+  }
+}
+
 async function pollLoop(session: BBSSession, st: CallerState): Promise<void> {
   if (st.polling) return;
   st.polling = true;
@@ -235,6 +268,7 @@ async function pollLoop(session: BBSSession, st: CallerState): Promise<void> {
       try {
         const reply = await st.client.events(st.sid, st.since, deps.pollWaitSeconds ?? 20);
         st.since = reply.rev;
+        await primeGroupPeers(st, reply.rows);
         if (reply.rows.length > 0) deliver(session, st, reply.rows);
       } catch (err) {
         if (st.closed) break;
@@ -332,6 +366,7 @@ interface Payload {
   emoji?: string;
   targetUsername?: string;
   to?: string;
+  participants?: string[];
   clientId?: string;
   status?: string;
   custom?: string;
@@ -440,6 +475,12 @@ async function dispatch(socket: { emit: (e: string, ...a: unknown[]) => unknown 
         st.counter += 1;
         await st.client.dm(sid, p.to ?? '', sanitizeChatMessage(p.message ?? p.content ?? ''), `${st.handle}-dm-${Date.now()}-${st.counter}`);
         return;
+      case 'chat:group-dm': {
+        st.counter += 1;
+        const targets = (p.participants ?? []).map((n) => fullHandle(st, n)).filter((n) => n !== '');
+        await st.client.dmGroup(sid, targets, sanitizeChatMessage(p.message ?? p.content ?? ''), `${st.handle}-gdm-${Date.now()}-${st.counter}`);
+        return;
+      }
       case 'chat:presence': {
         const status = p.status;
         if (status !== 'online' && status !== 'away' && status !== 'busy' && status !== 'dnd') return;

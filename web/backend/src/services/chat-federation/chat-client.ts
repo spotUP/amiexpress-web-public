@@ -281,6 +281,14 @@ export class ChatClient {
       { content, clientId },
     );
   }
+  /** /msg @a @b text: a group DM; the hub makes the thread from the member set. */
+  dmGroup(sid: string, participants: string[], content: string, clientId: string) {
+    return this.json<{ id: string; seq: number; threadId: string }>('POST', '/dm-group', sid, { participants, content, clientId });
+  }
+  /** The caller's DM threads (1:1 and group); a group's peer is its other members joined by ','. */
+  dmThreads(sid: string): Promise<ChatTextReply> {
+    return this.text('/dm.txt', sid, 'DM');
+  }
   who(sid: string): Promise<ChatTextReply> {
     return this.text('/who.txt', sid, 'WHO');
   }
