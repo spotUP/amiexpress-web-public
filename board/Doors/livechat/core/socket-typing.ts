@@ -12,6 +12,8 @@ export function shouldShowEvent(event: BBSEvent, prefs: AppState['prefs']): bool
 
     case 'upload_start':
     case 'upload_complete':
+    case 'upload':
+    case 'download':
     case 'download_start':
     case 'download_complete':
       return prefs.showFileActivity;

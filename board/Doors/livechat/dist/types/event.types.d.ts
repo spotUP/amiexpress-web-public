@@ -1,5 +1,5 @@
 /** BBS event types */
-export type BBSEventType = 'user_login' | 'user_logout' | 'upload_start' | 'upload_complete' | 'download_start' | 'download_complete' | 'door_enter' | 'door_exit' | 'new_message' | 'page_sysop' | 'conference_join' | 'node_activity' | 'system_announcement';
+export type BBSEventType = 'user_login' | 'user_logout' | 'upload_start' | 'upload_complete' | 'upload' | 'download' | 'download_start' | 'download_complete' | 'door_enter' | 'door_exit' | 'new_message' | 'page_sysop' | 'conference_join' | 'node_activity' | 'system_announcement';
 /** BBS event visibility */
 export type EventVisibility = 'all' | 'channel' | 'user';
 /** BBS event */
@@ -10,6 +10,8 @@ export interface BBSEvent {
     username?: string;
     nodeId?: number;
     details: Record<string, any>;
+    /** The board's own upload/download events carry their fields here (bbs-event-emitter.ts), not in details. */
+    data?: Record<string, any>;
     visibility: EventVisibility;
     channelId?: string;
     timestamp: Date;

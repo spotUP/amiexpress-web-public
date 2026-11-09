@@ -53,7 +53,8 @@ ${voice ? exports.HELP_VOICE_SECTION : ''}{bold}{${door_theme_1.T.ok}-fg}--- COM
 {${door_theme_1.T.accent}-fg}Room Commands:{/${door_theme_1.T.accent}-fg}
   /join <room>      Join a channel
   /leave            Leave current channel
-  /create <name>    Create new channel
+  /create <name>    Create a channel; asks Text, Voice or Art
+                    (--type text|voice|art skips the question)
   /topic <text>     Set channel topic
   /rooms            List all rooms
 

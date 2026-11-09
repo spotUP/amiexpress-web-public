@@ -112,6 +112,7 @@ const msg_thread_1 = require("./commands/msg-thread");
 const search_handlers_1 = require("./handlers/search-handlers");
 const search_overlay_1 = require("./ui/search-overlay");
 const search_1 = require("./commands/search");
+const chan_admin_1 = require("./commands/chan-admin");
 const moderation_1 = require("./commands/moderation");
 const dialog_helpers_1 = require("./ui/dialog-helpers");
 const command_execution_handlers_1 = require("./handlers/command-execution-handlers");
@@ -818,6 +819,11 @@ async function createApp(session) {
                 socket.emit('room:leave');
             socket.emit('room:join', { roomName: channel.name });
             voiceChannel.hideGrid(); // Hide video grid when viewing text
+            // An Art room is a drawing channel: joining it opens the canvas.
+            if (isDrawingChannel(channel.name)) {
+                enterDrawingMode(channel.name);
+                return;
+            }
         }
         else {
             // Click on the channel we're already in. Two meaningful actions:
@@ -1307,7 +1313,7 @@ async function createApp(session) {
     // ========== POPUP DIALOGS ==========
     // Note: Dialog widgets (Message, Prompt, Question) have built-in fixed heights.
     // Don't pass height: 'shrink' as it breaks nested element rendering.
-    const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = (0, blessed_helpers_1.createDialogs)(screen, inputBox, 
+    const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog, showChoiceDialog } = (0, blessed_helpers_1.createDialogs)(screen, inputBox, 
     // Without this the SDK falls back to its own cyan/green/yellow rules
     // and the dialogs are the one part of the door a theme never
     // reached (sysop: "livechat doesnt look themed at all").
@@ -2397,7 +2403,9 @@ async function createApp(session) {
             return true;
         }
         return false;
-    }, sendRoomLine);
+    }, sendRoomLine, 
+    // /create asks for the channel type (sysop 2026-11-09): Text first.
+    (cb) => showChoiceDialog('Channel type', chan_admin_1.ROOM_KINDS.map(k => chan_admin_1.ROOM_KIND_LABELS[k]), (i) => cb(i === null ? null : chan_admin_1.ROOM_KINDS[i])));
     inputBox.on('submit', (value) => { asyncSubmitHandler(value); });
     // Live typing indicator and command autocomplete
     inputBox.on('keypress', (ch, key) => {

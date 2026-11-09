@@ -9,7 +9,8 @@ function buildSidebarItems(input) {
     // ---------- TEXT CHANNELS ----------
     items.push(`{${door_theme_1.T.accent}-fg}{bold}TEXT CHANNELS{/bold}{/${door_theme_1.T.accent}-fg}`);
     channelItems.push({ id: '', name: '', type: 'header' });
-    channelsToShow.forEach(ch => {
+    // Voice rooms list under VOICE CHANNELS, not here.
+    channelsToShow.filter(ch => ch.kind !== 'voice').forEach(ch => {
         const unread = ch.unreadCount ? ` (${ch.unreadCount})` : '';
         const isActive = isCurrentChannel(ch.id, ch.name);
         const hasUnread = ch.unreadCount && ch.unreadCount > 0;
@@ -31,7 +32,9 @@ function buildSidebarItems(input) {
             endColor = `{/${door_theme_1.T.dim}-fg}`;
         }
         const arrow = isExpanded ? 'v' : '>';
-        items.push(color + arrow + ' # ' + ch.name + unread + endColor);
+        // An Art room opens the drawing canvas; [A] says so before the click.
+        const mark = ch.kind === 'art' ? ' [A] ' : ' # ';
+        items.push(color + arrow + mark + ch.name + unread + endColor);
         channelItems.push({ id: ch.id, name: ch.name, type: 'text' });
         if (isExpanded && isActive) {
             for (const [uid, u] of onlineUsers) {
@@ -72,7 +75,15 @@ function buildSidebarItems(input) {
     // ---------- VOICE CHANNELS ----------
     items.push(`{${door_theme_1.T.accent}-fg}{bold}VOICE CHANNELS{/bold}{/${door_theme_1.T.accent}-fg}`);
     channelItems.push({ id: '', name: '', type: 'header' });
-    const voiceChannels = voiceChannelService.getVoiceChannels();
+    // The hub's Voice rooms are the voice channels; the service adds who is in
+    // each one. A room the service already knows is listed once.
+    const known = voiceChannelService.getVoiceChannels();
+    const voiceChannels = [
+        ...known,
+        ...channelsToShow
+            .filter(ch => ch.kind === 'voice' && !known.some((vc) => vc.id === ch.id))
+            .map(ch => ({ id: ch.id, name: ch.name, participants: [] })),
+    ];
     if (voiceChannels.length === 0) {
         const isInVoice = voiceChannelService.isInVoiceChannel();
         const icon = isInVoice ? `{${door_theme_1.T.ok}-fg}[V]{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.dim}-fg}[V]{/${door_theme_1.T.dim}-fg}`;

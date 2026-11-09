@@ -13,8 +13,14 @@ const state_1 = require("../core/state");
 const settings_1 = require("../settings");
 const settings_save_1 = require("../overlays/settings-save");
 const prefs_sync_1 = require("../core/prefs-sync");
-function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, messagePicker, tryJoinVoiceChannel, sendRoomLine) {
+const chan_admin_1 = require("../commands/chan-admin");
+function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, messagePicker, tryJoinVoiceChannel, sendRoomLine, 
+/** Asks which kind of channel /create makes; null = cancelled. */
+pickRoomKind) {
     return async (value) => {
+        // Set when this submit opened a picker: the picker owns focus, so the
+        // unified clear below must not hand it back to the input box.
+        let pickerOpened = false;
         try {
             // Hide command suggestions on submit
             hideCommandSuggestions();
@@ -87,13 +93,31 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     }
                 }
                 if (cmdName === 'create' && r.data?.name) {
-                    socket.emit('room:create', {
-                        roomName: r.data.name,
-                        topic: r.data.topic || '',
-                        isPublic: !r.data.isPrivate,
-                        isInviteOnly: r.data.isInviteOnly || r.data.isPrivate,
-                        motd: r.data.motd || null,
+                    const d = r.data;
+                    const create = (kind) => socket.emit('room:create', {
+                        roomName: d.name,
+                        topic: d.topic || '',
+                        isPublic: !d.isPrivate,
+                        isInviteOnly: d.isInviteOnly || d.isPrivate,
+                        motd: d.motd || null,
+                        kind,
                     });
+                    if ((0, chan_admin_1.isRoomKind)(d.kind))
+                        create(d.kind);
+                    else if (pickRoomKind) {
+                        // Every new channel gets a type: ask before it reaches the hub.
+                        pickerOpened = true;
+                        pickRoomKind((kind) => {
+                            if (kind) {
+                                addSystemMessage(`Creating #${d.name}...`);
+                                create(kind);
+                            }
+                            else
+                                addSystemMessage(`#${d.name} was not created.`);
+                        });
+                    }
+                    else
+                        create('text');
                 }
                 if (cmdName === 'who' || cmdName === 'users') {
                     showUserList();
@@ -322,7 +346,8 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 inputBox.setContent('');
             if (inputBox._invalidateCoords)
                 inputBox._invalidateCoords();
-            inputBox.focus();
+            if (!pickerOpened)
+                inputBox.focus();
             screen.render();
         }
         catch (error) {

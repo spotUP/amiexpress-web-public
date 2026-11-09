@@ -15,7 +15,10 @@ function createDrawingCanvas(s, sock, st, cl, tb, bbs, ib, gcdn, ucl, usb, asm, 
     let pc = null;
     let ldx = -1;
     let ldy = -1;
-    const idc = (cn) => dcs.has(cn) || cn.startsWith('art:');
+    // A drawing channel: /draw made it, it carries the old art: prefix, or the
+    // hub stores it as an Art room (picked at /create).
+    const idc = (cn) => dcs.has(cn) || cn.startsWith('art:')
+        || (Array.isArray(st?.channels) && st.channels.some((c) => c.kind === 'art' && (c.name === cn || c.id === cn)));
     const canvas = blessed_1.default.canvas({ parent: s, top: MH, left: SW, right: 0, bottom: SH + IH, label: ' Drawing [Resize: Corner] - Click/Drag | C: Colors | X: Clear | ESC: Exit ', border: { type: 'line' }, hidden: true, mouse: true, fillChar: '\u2588', clearChar: ' ', ch: ' ', style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } } });
     const cols = ['white', 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta', 'gray'];
     let ci = 0;

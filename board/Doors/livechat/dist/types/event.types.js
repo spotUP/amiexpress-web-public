@@ -7,6 +7,8 @@ exports.EVENT_PREFIXES = {
     user_logout: '<--',
     upload_start: '[UL]',
     upload_complete: '[UL]',
+    upload: '[UL]',
+    download: '[DL]',
     download_start: '[DL]',
     download_complete: '[DL]',
     door_enter: '[DOOR]',

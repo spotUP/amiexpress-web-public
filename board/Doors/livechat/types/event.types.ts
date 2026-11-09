@@ -4,6 +4,8 @@ export type BBSEventType =
   | 'user_logout'
   | 'upload_start'
   | 'upload_complete'
+  | 'upload'
+  | 'download'
   | 'download_start'
   | 'download_complete'
   | 'door_enter'
@@ -25,6 +27,8 @@ export interface BBSEvent {
   username?: string;
   nodeId?: number;
   details: Record<string, any>;
+  /** The board's own upload/download events carry their fields here (bbs-event-emitter.ts), not in details. */
+  data?: Record<string, any>;
   visibility: EventVisibility;
   channelId?: string;
   timestamp: Date;
@@ -36,6 +40,8 @@ export const EVENT_PREFIXES: Record<BBSEventType, string> = {
   user_logout: '<--',
   upload_start: '[UL]',
   upload_complete: '[UL]',
+  upload: '[UL]',
+  download: '[DL]',
   download_start: '[DL]',
   download_complete: '[DL]',
   door_enter: '[DOOR]',

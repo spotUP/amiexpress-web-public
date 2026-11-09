@@ -11,6 +11,11 @@ function getEventMessage(e) {
         case 'upload_complete': return { msg: `${e.username} uploaded "${d.filename}" to ${d.area}`, c: 'cyan' };
         case 'download_start': return { msg: `${e.username} is downloading "${d.filename}"`, c: 'yellow' };
         case 'download_complete': return { msg: `${e.username} downloaded "${d.filename}"`, c: 'yellow' };
+        // The board broadcasts uploads and downloads as 'upload' / 'download' with
+        // their fields in data (web/backend bbs-event-emitter.ts), not as *_complete
+        // with details.
+        case 'upload': return { msg: `${e.username} uploaded "${e.data?.fileName}"${e.data?.conferenceName ? ` to ${e.data.conferenceName}` : ''}`, c: 'cyan' };
+        case 'download': return { msg: `${e.username} downloaded "${e.data?.fileName}"${e.data?.conferenceName ? ` from ${e.data.conferenceName}` : ''}`, c: 'yellow' };
         case 'door_enter': return { msg: `${e.username} entered ${d.doorName}`, c: 'magenta' };
         case 'door_exit': return { msg: `${e.username} left ${d.doorName}`, c: 'magenta' };
         case 'new_message': return { msg: `New message in "${d.conference}" by ${e.username}`, c: 'blue' };

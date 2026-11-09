@@ -9,7 +9,7 @@
 /* eslint-disable no-console */
 
 const TEST_MODULES = ['./opens.test', './one-row-bars.test', './theme-menu.test', './theme-chrome.test',
-  './overlays-close.test', './forty-columns.test', './join-notice.test', './voice-telnet.test', './emoji-pick.test', './message-ids.test', './message-ack.test', './message-picker.test', './command-registry.test', './reactions.test', './message-edit.test', './custom-emoji.test', './channel-pin-unread.test', './room-commands.test', './presence-whois.test', './quote-shows-what-is-quoted.test', './palette-enter.test', './typing-buffer.test'];
+  './overlays-close.test', './forty-columns.test', './join-notice.test', './file-events.test', './voice-telnet.test', './emoji-pick.test', './message-ids.test', './message-ack.test', './message-picker.test', './command-registry.test', './reactions.test', './message-edit.test', './custom-emoji.test', './channel-pin-unread.test', './room-commands.test', './presence-whois.test', './quote-shows-what-is-quoted.test', './palette-enter.test', './typing-buffer.test'];
 
 // The door logs freely on startup; keep the report readable.
 const realLog = console.log;
