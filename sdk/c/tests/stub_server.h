@@ -91,6 +91,7 @@ typedef struct {
     char alice_status[16], alice_text[80];  /* the presence alice set (who.txt then reports it) */
     char ignore_list[128];                 /* comma separated nicks the stub holds as ignored (a test may preset it) */
     char pending_row[300];                 /* an event row (no seq) a write queued; the next events poll carries it as seq 9 */
+    volatile int events_ok_first, events_fail;  /* test sets: serve this many events polls, then answer 500 to the next events_fail */
     volatile int bad_auth;                 /* requests that lacked "Authorization: Board " */
     volatile int bad_session;              /* post-open requests lacking X-Chat-Session */
     volatile int react_known;              /* test sets: the caller already has this reaction, so a react

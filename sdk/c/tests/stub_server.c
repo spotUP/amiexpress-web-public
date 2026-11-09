@@ -731,6 +731,11 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         }
     } else if (is_get && strstr(path, "/chat/v1/events.txt") != 0) {
         st->events++;
+        if (st->events > st->events_ok_first && st->events_fail > 0) {
+            st->events_fail--;
+            chat_reply(fd, 500, "text/plain", "down");
+            return;
+        }
         {
             int rows = 0;
             char body_rows[1200];

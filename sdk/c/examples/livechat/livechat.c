@@ -1018,9 +1018,51 @@ static void take_events(void)
     for (i = 0; i < nreacted; i++) load_reactions(reacted[i]);
 }
 
+/* TS server.ts disconnection modal: MAX is doorSettings.reconnectAttempts (default 3); the C door has no such setting. */
+#define RECONNECT_MAX 3
+#define RECONNECT_REASON "Cannot reach the chat server."
+
+static void reconnect_open(const char *reason, int attempt)
+{
+    M.modal = LC_MODAL_RECONNECT;
+    copy(M.modal_text, sizeof M.modal_text, reason);
+    M.modal_attempt = attempt;
+    M.modal_max = RECONNECT_MAX;
+}
+
+/** A poll that fails opens the disconnection modal; polling stays off while it is open. */
 static void do_poll(void)
 {
-    if (ae_chat_poll(&chat, 0) == AE_CHAT_OK) take_events();
+    int rc;
+    if (M.modal == LC_MODAL_RECONNECT) return;
+    rc = ae_chat_poll(&chat, 0);
+    if (rc == AE_CHAT_OK) take_events();
+    else if ((rc == AE_CHAT_ERR_TRANSPORT || rc == AE_CHAT_ERR_STATUS)
+             && (M.modal == LC_MODAL_NONE || M.modal == LC_MODAL_MESSAGE)) reconnect_open(RECONNECT_REASON, 1);
+}
+
+/** Retry: one poll. Returns 1 when the door should end (past the maximum). */
+static int reconnect_retry(void)
+{
+    int rc;
+    system_line("Attempting to reconnect...");
+    rc = ae_chat_poll(&chat, 0);
+    if (rc == AE_CHAT_OK) {
+        M.modal = LC_MODAL_NONE;
+        take_events();
+        add_note(LC_SYSTEM, "Reconnected to server!");
+        M.lines[M.nlines - 1].tone = LC_TK_OK;
+        return 0;
+    }
+    if (M.modal_attempt >= M.modal_max) {
+        M.modal = LC_MODAL_NONE;
+        alert_line("Maximum reconnection attempts reached. Please restart LiveChat.");
+        present();
+        ae_delay_ticks(100);                         /* TS exits after 2 s */
+        return 1;
+    }
+    reconnect_open("Reconnection failed", M.modal_attempt + 1);
+    return 0;
 }
 
 /** Reacts and shows the result. The server keeps one row per user, emoji and message and sends a
@@ -2965,6 +3007,11 @@ static int handle_mouse(void)
             if (hit == LC_HIT_NO) M.modal = LC_MODAL_NONE;
             continue;
         }
+        if (M.modal == LC_MODAL_RECONNECT) {
+            if (hit == LC_HIT_YES && reconnect_retry()) return 1;
+            if (hit == LC_HIT_NO) return 1;
+            continue;
+        }
         if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) modal_close(); continue; }
         if (M.theme) {                          /* a click on a theme previews it; a click outside the panel is ignored */
             if (hit == LC_HIT_THEME_ROW && idx >= 0 && idx < ui_theme_count()) theme_show(idx);
@@ -3133,7 +3180,7 @@ static int handle_key(int key)
         else if (key == UI_KEY_UP && M.help_top > 0) M.help_top--;
         else if (key == UI_KEY_PGDN) { M.help_top += 10; if (M.help_top > lc_help_lines - 1) M.help_top = lc_help_lines - 1; }
         else if (key == UI_KEY_PGUP) { M.help_top -= 10; if (M.help_top < 0) M.help_top = 0; }
-        else M.help = 0;
+        else if (key == UI_KEY_ESC || key == 'q') M.help = 0;
         return 0;
     }
     if (M.view) {
@@ -3141,13 +3188,18 @@ static int handle_key(int key)
         else if (key == UI_KEY_UP && M.view_top > 0) M.view_top--;
         else if (key == UI_KEY_PGDN) { M.view_top += 10; if (M.view_top > M.view_n - 1) M.view_top = M.view_n - 1; }
         else if (key == UI_KEY_PGUP) { M.view_top -= 10; if (M.view_top < 0) M.view_top = 0; }
-        else M.view = 0;
+        else if (key == UI_KEY_ESC || key == 'q') M.view = 0;
         return 0;
     }
     if (M.search) { search_key(key); return 0; }
     if (M.settings) { settings_key(key); return 0; }
     if (M.theme) { theme_key(key); return 0; }
     if (M.modal == LC_MODAL_MESSAGE) { modal_close(); return 0; }
+    if (M.modal == LC_MODAL_RECONNECT) {
+        if (key == 'r' || key == 'R' || is_enter(key)) return reconnect_retry();
+        if (key == 'c' || key == 'C' || key == UI_KEY_ESC) return 1;
+        return 0;
+    }
     if (M.modal == LC_MODAL_QUIT) {
         if (key == 'y' || key == 'Y' || is_enter(key)) return 1;
         if (key == 'n' || key == 'N' || key == UI_KEY_ESC) M.modal = LC_MODAL_NONE;

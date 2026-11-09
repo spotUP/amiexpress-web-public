@@ -1372,6 +1372,23 @@ static void draw_modal(ui_cells *c, const lc_model *m, int *cr, int *cc)
         }
         return;
     }
+    if (m->modal == LC_MODAL_RECONNECT) {               /* TS ui/disconnection-modal.ts: Retry in T.ok, Cancel in T.alert */
+        char attempt[32];
+        ui_cells_modal(c, 12, w, LC_ACCENT, "Connection Error", LC_INK, &top, &left);
+        if (w > c->cols) w = c->cols;
+        ui_cells_pen(c, LC_ALERT, UI_CELLS_DEFAULT, 0);
+        centre(c, top + 2, left + 1, w - 2, "Lost connection to server");
+        ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+        centre(c, top + 4, left + 1, w - 2, m->modal_text);
+        sprintf(attempt, "Attempt %d/%d", m->modal_attempt, m->modal_max);
+        centre(c, top + 6, left + 1, w - 2, attempt);
+        ui_cells_button(c, top + 8, left + 12, 9, "[ Retry ]", LC_OK, LC_OK);
+        ui_cells_button(c, top + 8, left + 29, 10, "[ Cancel ]", LC_ALERT, LC_ALERT);
+        ui_hit_add(&lc_hits, LC_HIT_MODAL, top, left, 12, w);
+        ui_hit_add(&lc_hits, LC_HIT_YES, top + 8, left + 12, 3, 9);
+        ui_hit_add(&lc_hits, LC_HIT_NO, top + 8, left + 29, 3, 10);
+        return;
+    }
     ui_cells_modal(c, 12, w, LC_ACCENT, "Message", LC_INK, &top, &left);
     if (w > c->cols) w = c->cols;
     centre(c, top + 3, left + 1, w - 2, m->modal_title);

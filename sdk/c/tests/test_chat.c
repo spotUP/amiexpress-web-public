@@ -1443,6 +1443,46 @@ static void test_view_theme(void)
     stop_stub();
 }
 
+/* Disconnection modal (TS ui/disconnection-modal.ts, server.ts:2649): a failed poll opens it; Retry polls once. */
+static void test_door_disconnection(void)
+{
+    int rc;
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;
+    start_stub();
+    st->events_ok_first = 1; st->events_fail = 1;
+    rc = drive(KEYS("\r"), 1);                                /* join, then the idle poll fails */
+    assert(rc == 0 && M.modal == LC_MODAL_RECONNECT && M.modal_attempt == 1 && M.modal_max == 3);
+    assert(strcmp(M.modal_text, "Cannot reach the chat server.") == 0);
+    assert(strstr(screen_text, "Lost connection to server") != 0);
+    stop_stub();
+    start_stub();
+    st->events_ok_first = 1; st->events_fail = 1;
+    rc = drive(KEYS("\r" "\r" "x" "/q\r"), 1);                 /* Enter = Retry: the stub is back */
+    assert(rc == 0 && M.modal == LC_MODAL_NONE && st->events_fail == 0);
+    assert(has_line(0, "Attempting to reconnect...") && has_line(0, "Reconnected to server!"));
+    stop_stub();
+    start_stub();
+    st->events_ok_first = 1; st->events_fail = 100;
+    rc = drive(KEYS("\r" "\r" "\r" "\r"), 1);                  /* three Retry presses all fail: past the maximum */
+    assert(rc == 0 && st->events_fail == 96);                /* the idle poll and three Retry polls, no more */
+    assert(has_line(0, "Maximum reconnection attempts reached. Please restart LiveChat."));
+    stop_stub();
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    printf("  [OK] door: a failed poll opens the disconnection modal; Retry reconnects or ends past the maximum\n");
+}
+
+/* TS pinned-panel.ts:52 and thread-view.ts:54: the view closes on Esc or q only. */
+static void test_view_closes_on_esc_or_q(void)
+{
+    start_stub();
+    drive(KEYS("\r" "/pinned\r" "x"), 0);
+    assert(M.view);                                       /* a plain letter is ignored */
+    drive(KEYS("\r" "/pinned\r" "q"), 0);
+    assert(!M.view);
+    stop_stub();
+    printf("  [OK] door: the view overlay ignores a plain letter and closes on q\n");
+}
+
 /* C2/A12: the TS format picker (ui/format-picker.ts). Shift+Left selects in the input, F5 (or a selection held
  * still for the TS 500 ms = FMT_WAIT_TICKS) opens the picker; Down Down Enter Enter picks Markdown > Bold and the
  * selection is wrapped in place. F5 with no selection says how; a left press outside closes it. */
@@ -1527,6 +1567,8 @@ int main(void)
     test_view_theme();
     test_door_format_picker();
     test_door_emoji_picker();
+    test_door_disconnection();
+    test_view_closes_on_esc_or_q();
     test_door_emoji_commands();
     test_door_web_only_commands();
     test_door_no_config();

@@ -120,7 +120,7 @@ typedef struct {
 } lc_side;
 
 enum { LC_FOCUS_INPUT, LC_FOCUS_SIDEBAR, LC_FOCUS_MENU };
-enum { LC_MODAL_NONE, LC_MODAL_MESSAGE, LC_MODAL_QUIT, LC_MODAL_PROMPT };
+enum { LC_MODAL_NONE, LC_MODAL_MESSAGE, LC_MODAL_QUIT, LC_MODAL_PROMPT, LC_MODAL_RECONNECT };
 
 #define LC_INPUT_MAX 256
 /* TS typingBuffers: one live preview row per typer (D3). The hub caps the text at 200 bytes. */
@@ -160,6 +160,7 @@ typedef struct {
     int modal;
     char modal_title[24];          /* "Error", or the prompt's question */
     char modal_text[96];
+    int modal_attempt, modal_max;  /* LC_MODAL_RECONNECT: "Attempt n/MAX" */
     char prompt[160];
     int prompt_len;
     int search;                    /* the search overlay (TS ui/search-overlay.ts on the SDK SearchModal) */
