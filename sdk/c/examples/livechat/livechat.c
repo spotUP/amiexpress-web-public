@@ -1692,6 +1692,7 @@ static void thread_view(const char *msg_id)
 }
 
 /** Runs one "/..." line. Returns 1 when the door should end. */
+static void emoji_show(void);
 static int run_command(const char *line)
 {
     char cmd[12], a[48];
@@ -1768,6 +1769,7 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "pinned", "pins")) { pinned_typed(); return 0; }
     if (is_cmd(cmd, "search", "find")) { search_typed(rest); return 0; }
     if (strcmp(cmd, "motd") == 0) { motd_typed(rest); return 0; }
+    if (strcmp(cmd, "emoji") == 0 && *rest == '\0') { emoji_show(); return 0; }   /* commands/emoji.ts: no query opens the picker */
     if (strcmp(cmd, "customemoji") == 0) { customemoji_typed(rest); return 0; }
     system_line("Unknown command. Type /help for help.");
     return 0;
@@ -1864,12 +1866,42 @@ static int fmt_tick(int ticks)
     return fmt_show();
 }
 
+static void set_focus(int focus);
+
+/** Open the emoji picker (TS emojiPicker.show: F4, the Tools menu, /emoji). Already shown: nothing, as TS isVisible. */
+static void emoji_show(void)
+{
+    if (M.fmt) return;
+    lc_emoji_open(&M);
+    fmt_wait = 0;
+}
+
+/** The picked emoji (TS insertEmojiIntoInput): getValue() + code + ' ', the cursor at the end, the input focused. */
+static void emoji_apply(void)
+{
+    int cap = LC_INPUT_MAX < AE_CHAT_TEXT_MAX + 1 ? LC_INPUT_MAX : AE_CHAT_TEXT_MAX + 1;
+    const char *code = lc_emoji_code(M.fmt_cat, M.fmt_item);
+    int n = (int)strlen(code);
+    M.fmt = 0;
+    if (n == 0) return;
+    if (M.input_len + n + 1 >= cap) { system_line("The emoji does not fit the input"); return; }
+    memcpy(M.input + M.input_len, code, (size_t)n);
+    M.input_len += n;
+    M.input[M.input_len++] = ' ';
+    M.input[M.input_len] = '\0';
+    M.input_cur = M.input_len;
+    M.input_anchor = -1;
+    set_focus(LC_FOCUS_INPUT);
+    fmt_wait = 0; fmt_seen_a = fmt_seen_b = -1;
+}
+
 /** The picked item (TS onSelect): the selection is replaced by its wrapped form, the cursor goes after it. */
 static void fmt_apply(void)
 {
     int cap = LC_INPUT_MAX < AE_CHAT_TEXT_MAX + 1 ? LC_INPUT_MAX : AE_CHAT_TEXT_MAX + 1;
     int a = M.fmt_a, b = M.fmt_b, w;
     char wrapped[LC_INPUT_MAX + 64];
+    if (M.fmt_kind == LC_PICK_EMOJI) { emoji_apply(); return; }
     M.fmt = 0;
     if (a < 0 || b > M.input_len || a >= b) return;
     w = lc_fmt_wrap(wrapped, (int)sizeof wrapped, M.fmt_cat, M.fmt_item, M.input + a, b - a, M.rgb);
@@ -1897,7 +1929,7 @@ static void fmt_key(int key)
 static void fmt_click(int hit, int idx, int button)
 {
     if (hit == LC_HIT_FMT_CLOSE) { M.fmt = 0; return; }
-    if (hit == LC_HIT_FMT_CAT && idx >= 0 && idx < LC_FMT_CATS) {
+    if (hit == LC_HIT_FMT_CAT && idx >= 0 && idx < lc_pick_cats(&M)) {
         if (idx == M.fmt_cat) { M.fmt_pane = LC_FMT_PANE_ITEM; return; }
         M.fmt_pane = LC_FMT_PANE_CAT;
         lc_fmt_move(&M, idx - M.fmt_cat);
@@ -1905,7 +1937,7 @@ static void fmt_click(int hit, int idx, int button)
     }
     if (hit == LC_HIT_FMT_ITEM && idx >= 0) {
         int item = idx + M.fmt_item_top;
-        if (item >= lc_fmt_count(M.fmt_cat)) return;
+        if (item >= (M.fmt_kind == LC_PICK_EMOJI ? lc_emoji_count(M.fmt_cat) : lc_fmt_count(M.fmt_cat))) return;
         if (M.fmt_pane == LC_FMT_PANE_ITEM && item == M.fmt_item) { fmt_apply(); return; }
         M.fmt_pane = LC_FMT_PANE_ITEM;
         lc_fmt_move(&M, item - M.fmt_item);
@@ -2159,7 +2191,8 @@ static int menu_pick(int menu, int item)
         if (l != 0 && l->id[0] != '\0') thread_view(l->id);
         else system_line("Threads: use /threads or reply on any message to open the thread view.");
     }
-    else not_yet(it);                       /* Emoji, Files, Settings, Theme, Render, Grid */
+    else if (strncmp(it, "Emoji", 5) == 0) emoji_show();
+    else not_yet(it);                       /* Files, Settings, Theme, Render, Grid */
     return 0;
 }
 
@@ -2282,7 +2315,7 @@ static int handle_key(int key)
     if (key == UI_KEY_F1) { open_help(); return 0; }
     if (key == UI_KEY_F2) { M.sidebar_hidden = !M.sidebar_hidden; if (M.focus == LC_FOCUS_SIDEBAR) set_focus(LC_FOCUS_INPUT); return 0; }
     if (key == UI_KEY_F3) { switch_tab(!M.side_tab); return 0; }
-    if (key == UI_KEY_F4) return 0;                          /* the emoji picker has no wire here */
+    if (key == UI_KEY_F4) { emoji_show(); return 0; }       /* TS server.ts F4 */
     if (key == UI_KEY_F5) {                                  /* TS server.ts: F5 formats the selection */
         if (!fmt_show()) system_line("Select text first (Shift+Arrow keys), then press F5 for formatting");
         return 0;

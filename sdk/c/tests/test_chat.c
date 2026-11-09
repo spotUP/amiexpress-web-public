@@ -1064,6 +1064,28 @@ static void test_door_format_picker(void)
     printf("  [OK] door: a selection opens the format picker (F5 or held still) and Markdown > Bold wraps it\n");
 }
 
+/* C1: the TS emoji picker (ui/emoji-picker.ts). F4 opens it; Tab moves to the items, Enter picks the first
+ * Emotions emoji and the input gets ":smile: " appended, the cursor at the end, the picker closed. */
+static void test_door_emoji_picker(void)
+{
+    int rc;
+    start_stub();
+    rc = drive(KEYS("\r" "hi " "\x1bOS" "\t" "\r"), 0);
+    assert(rc == 0 && M.fmt == 0);
+    assert(strcmp(M.input, "hi :smile: ") == 0 && M.input_cur == M.input_len);
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "hi " "\x1bOS"), 0);                   /* left open: it reached the wire */
+    assert(rc == 0 && M.fmt == 1 && M.fmt_kind == LC_PICK_EMOJI);
+    assert(strstr(screen_text, "Emoji Picker") && strstr(screen_text, "Emotions"));
+    fmt_click(LC_HIT_CHAT, 0, AE_MOUSE_RIGHT);                    /* a right press outside does not cancel */
+    assert(M.fmt == 1);
+    fmt_click(LC_HIT_CHAT, 0, AE_MOUSE_LEFT);                     /* a left press outside does */
+    assert(M.fmt == 0 && strcmp(M.input, "hi ") == 0);
+    stop_stub();
+    printf("  [OK] door: F4 opens the emoji picker and Tab, Enter appends :smile: to the input\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -1093,6 +1115,7 @@ int main(void)
     test_door_b4_user_menu();
     test_door_message_formatting();
     test_door_format_picker();
+    test_door_emoji_picker();
     test_door_no_config();
     test_config_save();
     test_register();

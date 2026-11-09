@@ -176,51 +176,51 @@ void lc_custom_emoji_add(const char *name, const char *ascii)
     ncustom_emoji++;
 }
 
-/* TS utils/emojis.ts EMOJIS (code, display text). */
-static const struct { const char *code, *text; } emoji_table[] = {
-    { ":smile:", ":-)" },
-    { ":grin:", ":D" },
-    { ":joy:", "XD" },
-    { ":wink:", ";-)" },
-    { ":heart:", "<3" },
-    { ":sad:", ":-(" },
-    { ":cry:", ":'-(" },
-    { ":shock:", ":O" },
-    { ":angry:", ">:-(" },
-    { ":cool:", "B-)" },
-    { ":tongue:", ":P" },
-    { ":kiss:", ":-*" },
-    { ":blush:", ":-}" },
-    { ":confused:", ":-/" },
-    { ":neutral:", ":-|" },
-    { ":surprised:", ":o" },
-    { ":evil:", ">:-)" },
-    { ":angel:", "O:-)" },
-    { ":tableflip:", "(>_<)~~ |[__]|" },
-    { ":unflip:", "|---| (-_-)" },
-    { ":shrug:", "\\(o.O)/" },
-    { ":fight:", "(>_<)*" },
-    { ":dance:", "\\(^o^)/" },
-    { ":hug:", "(>^_^)<" },
-    { ":run:", "(>_>)===>" },
-    { ":wave:", "(^.^)/" },
-    { ":facepalm:", "(>_<;)" },
-    { ":thumbsup:", "(Y)" },
-    { ":thumbsdown:", "(N)" },
-    { ":fire:", "(*)" },
-    { ":star:", "*" },
-    { ":check:", "[v]" },
-    { ":x:", "[x]" },
-    { ":skull:", "8X" },
-    { ":music:", "~o~" },
-    { ":heart2:", "<3" },
-    { ":diamond:", "<>" },
-    { ":arrow:", "->" },
-    { ":warning:", "(!)" },
-    { ":lightning:", "/!\\" },
-    { ":amiga:", "[A]" },
-    { ":bbs:", "[BBS]" },
-    { ":door:", "[=>]" },
+/* TS utils/emojis.ts EMOJIS (code, display text, category: 0 Emotions 1 Actions 2 Symbols 3 Special). */
+static const struct { const char *code, *text; int cat; } emoji_table[] = {
+    { ":smile:", ":-)", 0 },
+    { ":grin:", ":D", 0 },
+    { ":joy:", "XD", 0 },
+    { ":wink:", ";-)", 0 },
+    { ":heart:", "<3", 0 },
+    { ":sad:", ":-(", 0 },
+    { ":cry:", ":'-(", 0 },
+    { ":shock:", ":O", 0 },
+    { ":angry:", ">:-(", 0 },
+    { ":cool:", "B-)", 0 },
+    { ":tongue:", ":P", 0 },
+    { ":kiss:", ":-*", 0 },
+    { ":blush:", ":-}", 0 },
+    { ":confused:", ":-/", 0 },
+    { ":neutral:", ":-|", 0 },
+    { ":surprised:", ":o", 0 },
+    { ":evil:", ">:-)", 0 },
+    { ":angel:", "O:-)", 0 },
+    { ":tableflip:", "(>_<)~~ |[__]|", 1 },
+    { ":unflip:", "|---| (-_-)", 1 },
+    { ":shrug:", "\\(o.O)/", 1 },
+    { ":fight:", "(>_<)*", 1 },
+    { ":dance:", "\\(^o^)/", 1 },
+    { ":hug:", "(>^_^)<", 1 },
+    { ":run:", "(>_>)===>", 1 },
+    { ":wave:", "(^.^)/", 1 },
+    { ":facepalm:", "(>_<;)", 1 },
+    { ":thumbsup:", "(Y)", 2 },
+    { ":thumbsdown:", "(N)", 2 },
+    { ":fire:", "(*)", 2 },
+    { ":star:", "*", 2 },
+    { ":check:", "[v]", 2 },
+    { ":x:", "[x]", 2 },
+    { ":skull:", "8X", 2 },
+    { ":music:", "~o~", 2 },
+    { ":heart2:", "<3", 2 },
+    { ":diamond:", "<>", 2 },
+    { ":arrow:", "->", 2 },
+    { ":warning:", "(!)", 2 },
+    { ":lightning:", "/!\\", 2 },
+    { ":amiga:", "[A]", 3 },
+    { ":bbs:", "[BBS]", 3 },
+    { ":door:", "[=>]", 3 },
 };
 #define NEMOJI ((int)(sizeof emoji_table / sizeof emoji_table[0]))
 
@@ -1044,26 +1044,95 @@ int lc_fmt_wrap(char *out, int cap, int cat, int item, const char *text, int len
 void lc_fmt_open(lc_model *m, int a, int b)
 {
     m->fmt = 1;
+    m->fmt_kind = LC_PICK_FORMAT;
     m->fmt_cat = m->fmt_item = m->fmt_item_top = 0;
     m->fmt_pane = LC_FMT_PANE_CAT;
     m->fmt_a = a < b ? a : b;
     m->fmt_b = a < b ? b : a;
 }
 
+/* ---- the emoji picker: TS ui/emoji-picker.ts, categories Emotions/Actions/Symbols/Special ---- */
+static const char *const emoji_cats[LC_EMOJI_CATS] = { "Emotions", "Actions", "Symbols", "Special" };
+static char emoji_code_buf[LC_CUSTOM_EMOJI_LEN + 4];
+
+const char *lc_emoji_cat_name(int cat) { return cat >= 0 && cat < LC_EMOJI_CATS ? emoji_cats[cat] : ""; }
+
+int lc_emoji_count(int cat)
+{
+    int i, n = 0;
+    if (cat < 0 || cat >= LC_EMOJI_CATS) return 0;
+    for (i = 0; i < NEMOJI; i++) if (emoji_table[i].cat == cat) n++;
+    return cat == 3 ? n + ncustom_emoji : n;
+}
+
+/* The item-th emoji of the category: a built-in index, or -1 - custom index. */
+static int emoji_nth(int cat, int item)
+{
+    int i, n = 0;
+    if (item < 0 || item >= lc_emoji_count(cat)) return NEMOJI + ncustom_emoji;
+    for (i = 0; i < NEMOJI; i++) if (emoji_table[i].cat == cat && n++ == item) return i;
+    return NEMOJI + (item - (n));
+}
+
+const char *lc_emoji_code(int cat, int item)
+{
+    int k = emoji_nth(cat, item);
+    if (k < NEMOJI) return emoji_table[k].code;
+    if (k - NEMOJI >= ncustom_emoji) return "";
+    sprintf(emoji_code_buf, ":%s:", custom_emoji[k - NEMOJI].name);
+    return emoji_code_buf;
+}
+
+const char *lc_emoji_text(int cat, int item)
+{
+    int k = emoji_nth(cat, item);
+    if (k < NEMOJI) return emoji_table[k].text;
+    return k - NEMOJI < ncustom_emoji ? custom_emoji[k - NEMOJI].ascii : "";
+}
+
+#define EMOJI_GLYPH_COLUMN 16      /* emoji-label.ts GLYPH_COLUMN */
+int lc_emoji_label(char *out, int cap, int cat, int item, int width)
+{
+    const char *art = lc_emoji_text(cat, item), *code = lc_emoji_code(cat, item);
+    char full[2 * LC_CUSTOM_EMOJI_TEXT + LC_CUSTOM_EMOJI_LEN + 24];
+    int n;
+    if (cap <= 0 || width <= 0) { if (cap > 0) out[0] = '\0'; return 0; }
+    if (width <= EMOJI_GLYPH_COLUMN) sprintf(full, "%s", art);
+    else sprintf(full, "%-*s%s", EMOJI_GLYPH_COLUMN, art, code);
+    n = (int)strlen(full);
+    if (n > width) n = width;
+    if (n > cap - 1) n = cap - 1;
+    memcpy(out, full, (size_t)n);
+    out[n] = '\0';
+    return n;
+}
+
+void lc_emoji_open(lc_model *m)
+{
+    lc_fmt_open(m, 0, 0);
+    m->fmt_kind = LC_PICK_EMOJI;
+    m->fmt_a = m->fmt_b = 0;
+}
+
+int lc_pick_cats(const lc_model *m) { return m->fmt_kind == LC_PICK_EMOJI ? LC_EMOJI_CATS : LC_FMT_CATS; }
+int lc_pick_rows(const lc_model *m) { return (m->fmt_kind == LC_PICK_EMOJI ? LC_EMOJI_H : LC_FMT_H) - 4; }
+static int pick_count(const lc_model *m, int cat) { return m->fmt_kind == LC_PICK_EMOJI ? lc_emoji_count(cat) : lc_fmt_count(cat); }
+
 void lc_fmt_move(lc_model *m, int delta)
 {
+    int rows = lc_pick_rows(m);
     if (m->fmt_pane == LC_FMT_PANE_CAT) {
         int k = m->fmt_cat + delta;
         if (k < 0) k = 0;
-        if (k >= LC_FMT_CATS) k = LC_FMT_CATS - 1;
+        if (k >= lc_pick_cats(m)) k = lc_pick_cats(m) - 1;
         if (k != m->fmt_cat) { m->fmt_cat = k; m->fmt_item = m->fmt_item_top = 0; }   /* category-picker.ts: reload at 0 */
     } else {
-        int n = lc_fmt_count(m->fmt_cat), k = m->fmt_item + delta;
+        int n = pick_count(m, m->fmt_cat), k = m->fmt_item + delta;
         if (k >= n) k = n - 1;
         if (k < 0) k = 0;
         m->fmt_item = k;
         if (k < m->fmt_item_top) m->fmt_item_top = k;
-        if (k >= m->fmt_item_top + FMT_ITEM_ROWS) m->fmt_item_top = k - FMT_ITEM_ROWS + 1;
+        if (k >= m->fmt_item_top + rows) m->fmt_item_top = k - rows + 1;
     }
 }
 
@@ -1071,9 +1140,15 @@ void lc_fmt_move(lc_model *m, int delta)
  * above the input when it fits, else below; kept on screen. */
 static void fmt_box(const ui_cells *c, const lc_model *m, int *top, int *left, int *w)
 {
-    int W = c->cols, x = 1 + m->fmt_a - input_from(W, m), y = c->rows - 3;
+    int W = c->cols, x = 1 + m->fmt_a - input_from(W, m), y = c->rows - 3, h = LC_FMT_H;
     *w = W - 2 > 45 ? 45 : W - 2 < 20 ? 20 : W - 2;
-    *top = y - LC_FMT_H - 1;
+    if (m->fmt_kind == LC_PICK_EMOJI) {          /* emoji-picker.ts: width min(52, max(20, cols-2)), x = cols - width, y = rows - 7 */
+        *w = W - 2 > 52 ? 52 : W - 2 < 20 ? 20 : W - 2;
+        x = W - *w + 2;                          /* display() subtracts 2 again */
+        y = c->rows - 7;
+        h = LC_EMOJI_H;
+    }
+    *top = y - h - 1;
     if (*top < 0) *top = y + 1;
     *left = x - 2;
     if (*left + *w > W) *left = W - *w;
@@ -1084,37 +1159,43 @@ static void fmt_box(const ui_cells *c, const lc_model *m, int *top, int *left, i
 static void draw_fmt(ui_cells *c, const lc_model *m)
 {
     const unsigned long *rgb = fmt_rgb(m->rgb);
-    int ground = rgb_cube(rgb[UI_T_GROUND]), ok = rgb_cube(rgb[UI_T_OK]), alt = rgb_cube(rgb[UI_T_ACCENT_ALT]);
-    int top, left, w, catw, ix, iw, n = lc_fmt_count(m->fmt_cat), i;
-    char label[24];
+    int emoji = m->fmt_kind == LC_PICK_EMOJI, H = emoji ? LC_EMOJI_H : LC_FMT_H, ncat = lc_pick_cats(m), rows = lc_pick_rows(m);
+    int ground = rgb_cube(rgb[UI_T_GROUND]), ok = rgb_cube(rgb[UI_T_OK]), alt = rgb_cube(rgb[emoji ? UI_T_ACCENT : UI_T_ACCENT_ALT]);
+    int top, left, w, catw, ix, iw, n = pick_count(m, m->fmt_cat), i;
+    char label[80];
     fmt_box(c, m, &top, &left, &w);
     catw = w - 24 > 14 ? 14 : w - 24 < 8 ? 8 : w - 24;
     ix = left + 1 + catw;
     iw = w - 2 - catw;
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
-    ui_cells_fill(c, top + 1, left + 1, LC_FMT_H - 2, w - 2, ' ');
-    ui_cells_box(c, top, left, LC_FMT_H, w, LC_ACCENT, " Format ", LC_INK);
-    ui_cells_box(c, top + 1, left + 1, LC_FMT_H - 4, catw, ok, " Category ", LC_INK);   /* height 100%-2 */
-    for (i = 0; i < LC_FMT_CATS; i++) {                          /* categoryStyle: selected ground on ok */
+    ui_cells_fill(c, top + 1, left + 1, H - 2, w - 2, ' ');
+    ui_cells_box(c, top, left, H, w, LC_ACCENT, emoji ? " Emoji Picker [Tab | Enter] " : " Format ", LC_INK);
+    ui_cells_box(c, top + 1, left + 1, H - 4, catw, ok, " Category ", LC_INK);   /* height 100%-2 */
+    for (i = 0; i < ncat; i++) {                                 /* categoryStyle: selected ground on ok */
         int sel = i == m->fmt_cat;
         ui_cells_pen(c, sel ? ground : LC_INK, sel ? ok : UI_CELLS_DEFAULT, 0);
         ui_cells_fill(c, top + 2 + i, left + 2, 1, catw - 2, ' ');
-        ui_cells_text(c, top + 2 + i, left + 3, fmt_cats[i], catw - 3);
+        ui_cells_text(c, top + 2 + i, left + 3, emoji ? emoji_cats[i] : fmt_cats[i], catw - 3);
     }
-    sprintf(label, " %s ", fmt_cats[m->fmt_cat]);
+    sprintf(label, " %s ", emoji ? emoji_cats[m->fmt_cat] : fmt_cats[m->fmt_cat]);
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
-    ui_cells_box(c, top + 1, ix, LC_FMT_H - 2, iw, alt, label, LC_INK);
-    for (i = 0; i < FMT_ITEM_ROWS && m->fmt_item_top + i < n; i++) {   /* itemStyle: selected on accentAlt */
+    ui_cells_box(c, top + 1, ix, H - 2, iw, alt, label, LC_INK);
+    for (i = 0; i < rows && m->fmt_item_top + i < n; i++) {      /* itemStyle: selected ground on accentAlt (format) / accent (emoji) */
         int k = m->fmt_item_top + i, sel = k == m->fmt_item, r = top + 2 + i, bg = sel ? alt : UI_CELLS_DEFAULT;
         int fg = sel ? ground : LC_INK, bold = 0, under = 0;
+        ui_cells_pen(c, sel ? ground : LC_INK, sel ? alt : UI_CELLS_DEFAULT, 0);
+        ui_cells_fill(c, r, ix + 1, 1, iw - 2, ' ');
+        if (emoji) {                                             /* emojiLabel(e, itemWidth), a space before it */
+            lc_emoji_label(label, sizeof label, m->fmt_cat, k, w - catw - 2 - 1 - 2);
+            ui_cells_text(c, r, ix + 2, label, iw - 3);
+            continue;
+        }
         if (m->fmt_cat == 0) fg = rgb_cube(rgb[fmt_colors[k].tok]);                 /* the label in its own colour */
         else if (m->fmt_cat == 1) { fg = fx[k].fg; bold = fx[k].bold; }            /* the effect's static look */
         else if (k == 0) bold = 1;                                                  /* Bold */
         else if (k == 1 || k == 2) under = 1;                                       /* Italic, Underline: blessed underline */
         else if (k == 3) fg = rgb_cube(rgb[UI_T_DIM]);                              /* Strike: dim */
         else { fg = rgb_cube(rgb[UI_T_INK]); bg = 0; }                              /* Code: ink on black */
-        ui_cells_pen(c, sel ? ground : LC_INK, sel ? alt : UI_CELLS_DEFAULT, 0);
-        ui_cells_fill(c, r, ix + 1, 1, iw - 2, ' ');
         ui_cells_pen(c, fg, bg, bold);
         sprintf(label, "%c%c%s", UI_CELLS_M_ATTR, UI_CELLS_ATTR(under ? UI_CELLS_A_UNDERLINE : 0), lc_fmt_name(m->fmt_cat, k));
         ui_cells_marked(c, r, ix + 2, label, 0, (int)strlen(label), iw - 3);
@@ -1122,9 +1203,9 @@ static void draw_fmt(ui_cells *c, const lc_model *m)
     ui_cells_pen(c, LC_ALERT, 0, 0);                             /* the close button: red on black, right 1 */
     ui_cells_text(c, top + 1, left + w - 5, "[X]", 3);
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
-    ui_hit_add(&lc_hits, LC_HIT_FMT, top, left, LC_FMT_H, w);
-    ui_hit_add(&lc_hits, LC_HIT_FMT_CAT, top + 2, left + 2, LC_FMT_CATS, catw - 2);
-    ui_hit_add(&lc_hits, LC_HIT_FMT_ITEM, top + 2, ix + 1, n - m->fmt_item_top < FMT_ITEM_ROWS ? n - m->fmt_item_top : FMT_ITEM_ROWS, iw - 2);
+    ui_hit_add(&lc_hits, LC_HIT_FMT, top, left, H, w);
+    ui_hit_add(&lc_hits, LC_HIT_FMT_CAT, top + 2, left + 2, ncat, catw - 2);
+    ui_hit_add(&lc_hits, LC_HIT_FMT_ITEM, top + 2, ix + 1, n - m->fmt_item_top < rows ? n - m->fmt_item_top : rows, iw - 2);
     ui_hit_add(&lc_hits, LC_HIT_FMT_CLOSE, top + 1, left + w - 5, 1, 3);
 }
 

@@ -449,6 +449,27 @@ static int format_picker_model(void)
     m.fmt_pane = LC_FMT_PANE_ITEM;
     lc_fmt_move(&m, 99);
     if (m.fmt_item != lc_fmt_count(m.fmt_cat) - 1) { printf("fmt: item clamp %d\n", m.fmt_item); fail = 1; }
+    /* the emoji kind (emoji-picker.ts): four categories, TS EMOJIS counts 18/9/13/3, the same move/clamp */
+    if (LC_EMOJI_CATS != 4 || strcmp(lc_emoji_cat_name(0), "Emotions") != 0 || strcmp(lc_emoji_cat_name(3), "Special") != 0
+        || strcmp(lc_emoji_cat_name(1), "Actions") != 0 || strcmp(lc_emoji_cat_name(2), "Symbols") != 0) { printf("emoji: categories\n"); fail = 1; }
+    if (lc_emoji_count(0) != 18 || lc_emoji_count(1) != 9 || lc_emoji_count(2) != 13 || lc_emoji_count(3) != 3 || lc_emoji_count(4) != 0) {
+        printf("emoji: counts %d %d %d %d\n", lc_emoji_count(0), lc_emoji_count(1), lc_emoji_count(2), lc_emoji_count(3)); fail = 1; }
+    if (strcmp(lc_emoji_code(0, 0), ":smile:") != 0 || strcmp(lc_emoji_text(0, 0), ":-)") != 0 || strcmp(lc_emoji_code(3, 2), ":door:") != 0) { printf("emoji: items\n"); fail = 1; }
+    lc_emoji_label(out, sizeof out, 0, 0, 30);                    /* art padded to 16 columns, then the code */
+    if (strcmp(out, ":-)             :smile:") != 0) { printf("emoji: label '%s'\n", out); fail = 1; }
+    lc_emoji_label(out, sizeof out, 0, 0, 16);                    /* no room for both: the art alone */
+    if (strcmp(out, ":-)") != 0) { printf("emoji: narrow label '%s'\n", out); fail = 1; }
+    lc_emoji_label(out, sizeof out, 0, 0, 20);                    /* clipped to the width */
+    if (strlen(out) != 20) { printf("emoji: clip '%s'\n", out); fail = 1; }
+    memset(&m, 0, sizeof m);
+    lc_emoji_open(&m);
+    if (!m.fmt || m.fmt_kind != LC_PICK_EMOJI || m.fmt_pane != LC_FMT_PANE_CAT) { printf("emoji: open\n"); fail = 1; }
+    lc_fmt_move(&m, 9);
+    if (m.fmt_cat != LC_EMOJI_CATS - 1) { printf("emoji: cat clamp %d\n", m.fmt_cat); fail = 1; }
+    lc_fmt_move(&m, -1);
+    m.fmt_pane = LC_FMT_PANE_ITEM;
+    lc_fmt_move(&m, 99);
+    if (m.fmt_item != 12 || m.fmt_item_top != 12 - lc_pick_rows(&m) + 1) { printf("emoji: item clamp %d top %d\n", m.fmt_item, m.fmt_item_top); fail = 1; }
     return fail;
 }
 

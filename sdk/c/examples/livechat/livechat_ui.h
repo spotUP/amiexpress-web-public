@@ -145,6 +145,7 @@ typedef struct {
     int fmt_cat, fmt_item, fmt_item_top;
     int fmt_pane;                  /* LC_FMT_PANE_*: which list has the keys */
     int fmt_a, fmt_b;
+    int fmt_kind;                  /* LC_PICK_*: the same CategoryPicker serves the format and the emoji picker */
     const unsigned long *rgb;      /* the caller's theme tokens, 0xRRGGBB in ui_token order (the picker's colours) */
 } lc_model;
 
@@ -152,6 +153,20 @@ typedef struct {
 #define LC_FMT_CATS 3
 #define LC_FMT_H    10             /* format-picker.ts: height 10 */
 enum { LC_FMT_PANE_CAT, LC_FMT_PANE_ITEM };
+/* The emoji picker (TS ui/emoji-picker.ts): the same CategoryPicker, so the same model fields, keys, mouse and hits. */
+enum { LC_PICK_FORMAT, LC_PICK_EMOJI };
+#define LC_EMOJI_CATS 4
+#define LC_EMOJI_H    14           /* emoji-picker.ts: height 14 */
+const char *lc_emoji_cat_name(int cat);
+int lc_emoji_count(int cat);        /* Special also lists the board's custom emoji (TS allEmojis) */
+const char *lc_emoji_code(int cat, int item);   /* ":smile:" */
+const char *lc_emoji_text(int cat, int item);   /* ":-)" */
+/** emoji-picker.ts emojiLabel(e, width): the art padded to 16 columns then the code, clipped to `width`. */
+int lc_emoji_label(char *out, int cap, int cat, int item, int width);
+void lc_emoji_open(lc_model *m);
+/** The shown picker's category count / item count / name / row count, whichever kind it is. */
+int lc_pick_cats(const lc_model *m);
+int lc_pick_rows(const lc_model *m);
 const char *lc_fmt_cat_name(int cat);
 int lc_fmt_count(int cat);
 const char *lc_fmt_name(int cat, int item);
