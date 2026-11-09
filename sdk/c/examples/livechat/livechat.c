@@ -1902,7 +1902,7 @@ int main(int argc, char **argv)
     if (!ae_chat_config_load(&cfg, LIVECHAT_CFG_PATH)) {
         /* A sysop sets the door up here; anyone else is told to ask one. */
         if (user_level < 255 || setup_wizard(&cfg) != 1) {
-            if (user_level < 255) early_message("Setup", "This door has no LIVECHAT.cfg.");
+            if (user_level < 255) early_message("Setup", "No LIVECHAT.cfg. Setup needs access 255.");
             finish();
             return 0;
         }

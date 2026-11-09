@@ -664,8 +664,8 @@ static void test_door_no_config(void)
     user_level_text = "10";                                  /* a non-sysop keeps the plain message */
     rc = drive(KEYS("x"), 0);
     user_level_text = "255";
-    assert(rc == 0 && M.modal == LC_MODAL_MESSAGE && strstr(M.modal_text, "no LIVECHAT.cfg"));
-    assert(strstr(screen_text, "no LIVECHAT.cfg"));                                    /* and it reached the wire */
+    assert(rc == 0 && M.modal == LC_MODAL_MESSAGE && strstr(M.modal_text, "No LIVECHAT.cfg") && strstr(M.modal_text, "access 255"));
+    assert(strstr(screen_text, "No LIVECHAT.cfg"));                                    /* and it reached the wire */
     printf("  [OK] door: no config says so and leaves\n");
 }
 
@@ -717,7 +717,7 @@ static void test_door_wizard(void)
     remove("build/test_chat.cfg");
     user_level_text = "10";
     drive(KEYS("x"), 0);
-    assert(st->registers == 0 && strstr(screen_text, "no LIVECHAT.cfg") && !strstr(screen_text, "LiveChat68 setup"));
+    assert(st->registers == 0 && strstr(screen_text, "No LIVECHAT.cfg") && !strstr(screen_text, "LiveChat68 setup"));
     user_level_text = "255";
     sprintf(port, "%d", stub_port);
     n = sprintf(keys, "My Board\r\r\r");                              /* name, sysop (default), contact (none) */

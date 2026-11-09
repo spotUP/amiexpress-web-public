@@ -23,6 +23,10 @@ REQUIREMENTS
 
 INSTALL
 -------
+0. A stock AmiExpress install may have no DOORS: assign. Check with
+   "Assign DOORS: EXISTS" in a Shell. If it fails, add this line to
+   S:User-Startup (before AmiExpress starts) and reboot:
+      Assign DOORS: BBS:Doors
 1. Copy the whole LiveChat68 drawer contents to Doors:LIVECHAT68/
    so that the door file is Doors:LIVECHAT68/LIVECHAT68.
 2. Copy LC.info to BBS:Commands/BBSCmd/LC.info. This is the command
@@ -55,7 +59,8 @@ server for a board key at once, writes Doors:LIVECHAT68/LIVECHAT.cfg
 and goes straight into the chat. If the server refuses, its reason is
 shown and you can try again; nothing is written until it accepts.
 Answering no to TLS also sets AllowPlainHttp=1. Callers who are not
-sysops see a "not set up yet" message until you have done this.
+sysops see "No LIVECHAT.cfg. Setup needs access 255." until you
+have done this.
 
 NEVER SHARE LIVECHAT.cfg. It holds your board key, which identifies
 your board. Anyone with the key can speak as your board. Do not post
@@ -77,8 +82,9 @@ One Key=Value per line. Lines starting with # or ; are comments.
 
 TROUBLESHOOTING
 ---------------
-"Not set up yet" (as a caller): the sysop has not run the first-run
-setup. Log in as sysop and type LC.
+"No LIVECHAT.cfg. Setup needs access 255.": the first-run setup has
+not been done, or you ran LC below access level 255. Log in with an
+account at access 255 and type LC.
 
 No TCP stack / cannot open bsdsocket.library: start Roadshow or AmiTCP
 before the BBS, and check that the stack is running (try a ping).
