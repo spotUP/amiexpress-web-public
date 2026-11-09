@@ -100,6 +100,7 @@ typedef struct {
     char last_reply_to[32];                /* its replyTo; the message event row carries it back */
     char last_react[64];
     char last_react_msg[24];               /* message id of the latest react or unreact */
+    volatile int pin_calls, emoji_calls, room_admin_calls, thread_views, motd_set;   /* Phase A */
     char last_write_path[128];             /* path of the latest edit, delete, topic, moderation or invite call */
     char last_write_body[300];             /* its JSON body ("" for DELETE) */
     char last_dm_peer[64];

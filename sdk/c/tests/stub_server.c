@@ -483,6 +483,32 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (st->expire_next && !(is_post && strncmp(path, "/chat/v1/sessions", 17) == 0)) {
         st->expire_next = 0;
         chat_reply(fd, 401, "application/json", "{\"error\":\"session_expired\",\"detail\":\"gone\"}");
+    } else if (strncmp(path, "/chat/v1/rooms/", 15) == 0 && strstr(path, "/pins") != 0) {      /* Phase A */
+        chat_note_write(st, path, body);
+        if (is_get) chat_reply(fd, 200, "application/json",
+            "[{\"messageId\":\"m1\",\"user\":\"alice\",\"content\":\"hello there\",\"pinnedBy\":\"Tester\",\"at\":1700000000}]");
+        else { st->pin_calls++; chat_reply(fd, is_post ? 201 : 200, "application/json", "{\"ok\":true}"); }
+    } else if (is_get && strncmp(path, "/chat/v1/search", 15) == 0) {
+        chat_note_write(st, path, body);
+        chat_reply(fd, 200, "application/json",
+            "[{\"id\":\"m1\",\"room\":\"Lobby\",\"user\":\"alice\",\"at\":1700000000,\"content\":\"hello there\"}]");
+    } else if (strncmp(path, "/chat/v1/emoji", 14) == 0) {
+        chat_note_write(st, path, body);
+        if (is_get) chat_reply(fd, 200, "application/json", "[{\"boardId\":\"b\",\"name\":\"party\",\"dataUrl\":\"data:image/png;base64,AA\"}]");
+        else { st->emoji_calls++; chat_reply(fd, 200, "application/json", "{\"ok\":true}"); }
+    } else if (strcmp(path, "/chat/v1/motd") == 0) {
+        chat_note_write(st, path, body);
+        if (is_get) chat_reply(fd, 200, "application/json", st->motd_set ? "{\"text\":\"Be nice\"}" : "{\"text\":\"\"}");
+        else { st->motd_set = body != 0 && strstr(body, "\"text\":\"\"") == 0; chat_reply(fd, 200, "application/json", "{\"ok\":true}"); }
+    } else if (strncmp(path, "/chat/v1/rooms/", 15) == 0
+               && ((strcmp(method, "DELETE") == 0 && strchr(path + 15, '/') == 0) || (is_post && strstr(path, "/clear") != 0))) {
+        chat_note_write(st, path, body);
+        st->room_admin_calls++;
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
+    } else if (is_get && strncmp(path, "/chat/v1/threads/", 17) == 0) {
+        st->thread_views++;
+        chat_reply(fd, 200, "text/plain",
+                   "HISTORY|1|6|2\r\n1|m1|alice|1700000000||m1|9|hello there\r\n2|m2|bob|1700000060|m1|m1|0|second line\r\n");
     } else if (strncmp(path, "/chat/v1/messages/", 18) == 0 && strchr(path + 18, '/') == 0
                && (strcmp(method, "PUT") == 0 || strcmp(method, "DELETE") == 0)) {
         /* PUT /messages/:id edits, DELETE /messages/:id deletes; the event comes on the next poll. */

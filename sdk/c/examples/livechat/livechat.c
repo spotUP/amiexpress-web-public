@@ -401,7 +401,7 @@ static void open_help(void)
 static void present(void)
 {
     int cr = 0, cc = 0;
-    int caret = M.focus == LC_FOCUS_INPUT && !M.help && M.menu < 0
+    int caret = M.focus == LC_FOCUS_INPUT && !M.help && !M.view && M.menu < 0
                 && (M.modal == LC_MODAL_NONE || M.modal == LC_MODAL_PROMPT);
     lc_draw(&cells, &M, &cr, &cc);
     ui_cells_flush(&cells, &screen.buf, drain, 0);
@@ -592,6 +592,9 @@ static void side_presence(const char *user, const char *text)
 }
 
 /** Applies the rows of an events poll (seq|type|room|user|ref|at|color|text). */
+static int event_hidden(const char *type);
+static void thread_view(const char *msg_id);
+
 static void take_events(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
@@ -602,6 +605,7 @@ static void take_events(void)
         long seq = atol(f[0]);
         const char *type = f[1], *room = f[2], *user = f[3], *ref = f[4];
         int in_room = dm_thread[0] == '\0' && room_id[0] != '\0' && strcmp(room, room_id) == 0;
+        if (event_hidden(type)) continue;
         if (strcmp(type, "message") == 0 && in_room) {
             add_message(LC_LIVE, seq, ref, user, f[5], f[7], f[8]);
         } else if (strcmp(type, "dm") == 0) {
@@ -1121,6 +1125,10 @@ static void reply_typed(const char *rest, int thread)
     const char *text = rest;
     lc_line *l;
     arg_word(rest, a, sizeof a);
+    if (thread && digits(a) && *after_word(rest) == '\0') {          /* TS: an id alone opens the thread view */
+        if ((l = typed_message(a)) != 0) thread_view(l->id);
+        return;
+    }
     if (thread && (a[0] == '\0' || *after_word(rest) == '\0')) { usage("/thread <msg-id> message"); return; }
     if (*rest == '\0') { usage("/reply [msg-id] message"); return; }
     if (digits(a) && *after_word(rest) != '\0') {          /* TS: an id only with two or more words */
@@ -1266,6 +1274,272 @@ static void help_for(const char *want)
     system_line(line);
 }
 
+/* ---- Phase A: pins, search, motd, emoji, events, /me, /delete, thread view (TS commands/) ---- */
+
+static int ev_logins = 1, ev_files = 1, ev_doors = 1, ev_messages = 1, ev_announce = 1;   /* TS prefs.show*: all on */
+static int ev_mute_all;
+
+/** TS updateMuteAllEvents: muted when every kind is off. */
+static void events_sync(void)
+{
+    ev_mute_all = !(ev_logins || ev_files || ev_doors || ev_messages || ev_announce);
+}
+
+/** True when the preferences hide this BBS event type: TS socket-typing.ts shouldShowEvent, same
+ *  type names and grouping. Unknown types show. The hub relays no bbs:event to doors yet. */
+static int event_hidden(const char *type)
+{
+    static const char *const logins[] = { "user_login", "user_logout", 0 };
+    static const char *const files[] = { "upload_start", "upload_complete", "download_start", "download_complete", 0 };
+    static const char *const doors[] = { "door_enter", "door_exit", 0 };
+    static const char *const messages[] = { "new_message", "page_sysop", "conference_join", "node_activity", 0 };
+    static const char *const announce[] = { "system_announcement", 0 };
+    static const char *const *const groups[] = { logins, files, doors, messages, announce };
+    const int shown[] = { ev_logins, ev_files, ev_doors, ev_messages, ev_announce };
+    int g, i;
+    for (g = 0; g < 5; g++)
+        for (i = 0; groups[g][i]; i++)
+            if (strcmp(type, groups[g][i]) == 0) return ev_mute_all || !shown[g];
+    return 0;
+}
+
+static const char *on_off(int v) { return v ? "ON" : "OFF"; }
+
+static void events_typed(const char *rest)
+{
+    char sub[16], t[96];
+    arg_word(rest, sub, sizeof sub);
+    if (sub[0] == '\0') {
+        system_line("BBS Event Display Settings:");
+        system_line("");
+        sprintf(t, "  User Logins/Logouts:     %s", on_off(ev_logins)); system_line(t);
+        sprintf(t, "  File Uploads/Downloads:  %s", on_off(ev_files)); system_line(t);
+        sprintf(t, "  Door Activity:           %s", on_off(ev_doors)); system_line(t);
+        sprintf(t, "  New Messages:            %s", on_off(ev_messages)); system_line(t);
+        sprintf(t, "  System Announcements:    %s", on_off(ev_announce)); system_line(t);
+        system_line("");
+        system_line("Use /events <type> to toggle a specific event type:");
+        system_line("  /events logins       - Toggle login/logout events");
+        system_line("  /events files        - Toggle file upload/download events");
+        system_line("  /events doors        - Toggle door activity events");
+        system_line("  /events messages     - Toggle new message events");
+        system_line("  /events announcements - Toggle system announcements");
+        system_line("  /events on           - Enable all event types");
+        system_line("  /events off          - Disable all event types");
+        return;
+    }
+    if (strcmp(sub, "on") == 0 || strcmp(sub, "enable") == 0 || strcmp(sub, "off") == 0 || strcmp(sub, "disable") == 0) {
+        int on = sub[1] == 'n';
+        ev_logins = ev_files = ev_doors = ev_messages = ev_announce = on;
+        events_sync();
+        system_line(on ? "All BBS events enabled" : "All BBS events disabled");
+        return;
+    }
+    if (strcmp(sub, "logins") == 0 || strcmp(sub, "login") == 0) {
+        ev_logins = !ev_logins; sprintf(t, "Login/logout events: %s", on_off(ev_logins));
+    } else if (strcmp(sub, "files") == 0 || strcmp(sub, "file") == 0) {
+        ev_files = !ev_files; sprintf(t, "File upload/download events: %s", on_off(ev_files));
+    } else if (strcmp(sub, "doors") == 0 || strcmp(sub, "door") == 0) {
+        ev_doors = !ev_doors; sprintf(t, "Door activity events: %s", on_off(ev_doors));
+    } else if (strcmp(sub, "messages") == 0 || strcmp(sub, "message") == 0) {
+        ev_messages = !ev_messages; sprintf(t, "New message events: %s", on_off(ev_messages));
+    } else if (strcmp(sub, "announcements") == 0 || strcmp(sub, "announcement") == 0 || strcmp(sub, "system") == 0) {
+        ev_announce = !ev_announce; sprintf(t, "System announcements: %s", on_off(ev_announce));
+    } else {
+        sprintf(t, "Unknown event type: %.30s", sub);
+        system_line(t);
+        system_line("Valid types: logins, files, doors, messages, announcements, on, off");
+        return;
+    }
+    events_sync();
+    system_line(t);
+}
+
+/** /me: TS sends `ACTION: * user text` to the room. */
+static void me_typed(const char *rest)
+{
+    char text[LC_TEXT_MAX];
+    if (*rest == '\0') { usage("/me does something"); return; }
+    if (room_id[0] == '\0') { system_line("Join a room first."); return; }
+    sprintf(text, "ACTION: * %.30s %.190s", handle, rest);
+    send_room_line(text, 0);
+}
+
+/** /delete #channel: TS admin:delete-channel. The room is found by name in the room list. */
+static void channel_delete(const char *name)
+{
+    char id[48];
+    int i, rc = load_rooms();
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    for (i = 0; i < rooms_count && strcmp(rooms_name[i], name) != 0 && strcmp(rooms_id[i], name) != 0; i++) {}
+    if (i == rooms_count) { system_line("Not found."); return; }
+    copy(id, sizeof id, rooms_id[i]);
+    rc = ae_chat_room_delete(&chat, id);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    if (strcmp(id, room_id) == 0) leave_room();
+    load_sidebar();
+}
+
+static void delete_channel_typed(const char *rest)
+{
+    char a[48];
+    arg_word(rest, a, sizeof a);
+    if (a[0] == '#') memmove(a, a + 1, strlen(a));
+    if (a[0] == '\0') { usage("/delete #channel"); return; }
+    channel_delete(a);
+}
+
+/** The id a typed message number names, else the word as the id itself (TS never parses ids). */
+static const char *message_id_arg(const char *a, char *out, size_t cap)
+{
+    lc_line *l = digits(a) ? line_by_number(atoi(a)) : 0;
+    copy(out, cap, l != 0 && l->id[0] != '\0' ? l->id : a);
+    return out;
+}
+
+static void pin_typed(int pin, const char *rest)
+{
+    char a[48], id[48];
+    if (!need_level(80)) return;
+    arg_word(rest, a, sizeof a);
+    if (a[0] == '\0' || *after_word(rest) != '\0') { usage(pin ? "/pin <msg-id>" : "/unpin <msg-id>"); return; }
+    if (room_id[0] == '\0') { system_line("Join a room first."); return; }
+    message_id_arg(a, id, sizeof id);
+    if (ae_chat_pin(&chat, room_id, id, pin) != AE_CHAT_OK) { show_error(AE_CHAT_ERR_STATUS); return; }
+    system_line(pin ? "Pin requested." : "Unpin requested.");
+}
+
+static void view_open(const char *title)
+{
+    M.view = 1;
+    M.view_top = 0;
+    M.view_n = 0;
+    copy(M.view_title, sizeof M.view_title, title);
+}
+
+static void view_add(const char *text)
+{
+    if (M.view_n < LC_VIEW_MAX) copy(M.view_text[M.view_n++], LC_VIEW_COL, text);
+}
+
+/** /pinned (alias pins): TS pinned-panel.ts as the text overlay. */
+static void pinned_typed(void)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    char t[LC_VIEW_COL + 40], rows[16][LC_VIEW_COL];
+    int n = 0, i, rc;
+    if (room_id[0] == '\0') { system_line("Join a room first."); return; }
+    rc = ae_chat_pins(&chat, room_id);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && n < 16) {
+        sprintf(rows[n], "%.24s: %.60s", f[1], f[2]);
+        n++;
+    }
+    view_open("Pinned Messages");
+    if (n == 0) { view_add("No pinned messages in this room."); }
+    else {
+        sprintf(t, "=Pinned Messages (%d):", n);
+        view_add(t);
+        for (i = 0; i < n; i++) {
+            sprintf(t, "%d. %.90s", i + 1, rows[i]);
+            view_add(t);
+        }
+    }
+    view_add("");
+    view_add("Press ESC to close");
+}
+
+/** /search [query] (alias find): TS needs two characters; results print as system lines. */
+static void search_typed(const char *rest)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    char t[LC_TEXT_MAX], hits[10][LC_TEXT_MAX];
+    int n = 0, i, rc;
+    if (strlen(rest) < 2) { system_line("Search query must be at least 2 characters"); return; }
+    rc = ae_chat_search(&chat, rest, room_id[0] != '\0' ? room_id : 0, 10);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5 && n < 10) {
+        sprintf(hits[n], "%.24s: %.180s", f[2], f[4]);
+        n++;
+    }
+    sprintf(t, "Found %d result%s for \"%.100s\"", n, n == 1 ? "" : "s", rest);
+    system_line(t);
+    for (i = 0; i < n; i++) system_line(hits[i]);
+}
+
+/** /motd [text|--clear]. The hub's message of the day is board-wide; a set is sysop only. */
+static void motd_typed(const char *rest)
+{
+    char t[LC_TEXT_MAX];
+    int rc;
+    if (*rest == '\0') {
+        rc = ae_chat_motd(&chat, t + 7, (int)sizeof t - 7);
+        if (rc != AE_CHAT_OK) { show_error(rc); return; }
+        if (t[7] == '\0') { system_line("No MOTD set. Use /motd <text> to set, /motd --clear to clear."); return; }
+        memcpy(t, "[MOTD] ", 7);
+        system_line(t);
+        return;
+    }
+    then_poll(ae_chat_motd_set(&chat, strcmp(rest, "--clear") == 0 ? "" : rest));
+}
+
+/** /customemoji list | remove <name> | add: the hub stores a picture (data URL), not the TS display/ascii pair. */
+static void customemoji_typed(const char *rest)
+{
+    char sub[12], name[40], *f[AE_CHAT_ROW_FIELDS];
+    char t[LC_TEXT_MAX], names[24][40];
+    int n = 0, i, rc;
+    arg_word(rest, sub, sizeof sub);
+    rest = after_word(rest);
+    if (strcmp(sub, "list") == 0) {
+        rc = ae_chat_emoji_list(&chat);
+        if (rc != AE_CHAT_OK) { show_error(rc); return; }
+        while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 1 && n < 24) { copy(names[n], sizeof names[0], f[0]); n++; }
+        if (n == 0) { system_line("No custom emoji yet."); return; }
+        sprintf(t, "Custom emoji (%d):", n);
+        system_line(t);
+        for (i = 0; i < n; i++) { sprintf(t, "  :%.36s:", names[i]); system_line(t); }
+    } else if (strcmp(sub, "remove") == 0) {
+        arg_word(rest, name, sizeof name);
+        if (name[0] == '\0') { usage("/customemoji remove <name>"); return; }
+        if (!is_sysop) { system_line("Only the sysop can add or remove custom emoji."); return; }
+        then_poll(ae_chat_emoji_remove(&chat, name));
+    } else if (strcmp(sub, "add") == 0) {
+        if (!is_sysop) { system_line("Only the sysop can add or remove custom emoji."); return; }
+        system_line("Custom emoji pictures are added in the web chat: this board stores a picture, not display text.");
+    } else usage("/customemoji add <name> <display> <ascii> | remove <name> | list");
+}
+
+/** The thread of a message as the text overlay (TS overlays/thread-view.ts). The first row is the parent. */
+static void thread_view(const char *msg_id)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    char t[LC_VIEW_COL + 40], rows[LC_VIEW_MAX / 2][LC_VIEW_COL];
+    char first[LC_VIEW_COL], when[8];
+    int n = 0, i, rc = ae_chat_thread_list(&chat, msg_id, 30);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    first[0] = '\0';
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_MIN) {
+        if (first[0] == '\0') { hhmm_of(when, f[3]); sprintf(first, "%.24s: %.60s", f[2], f[7]); }
+        else if (n < LC_VIEW_MAX / 2) { sprintf(rows[n], "%.24s: %.60s", f[2], f[7]); n++; }
+    }
+    if (first[0] == '\0') { system_line("Not found."); return; }
+    view_open("Thread");
+    view_add("=Original Message:");
+    view_add(first);
+    sprintf(t, "%.5s", when);
+    view_add(t);
+    view_add("");
+    if (n == 0) view_add("No replies yet. Be the first to reply!");
+    else {
+        sprintf(t, "=Replies (%d):", n);
+        view_add(t);
+        for (i = 0; i < n; i++) { sprintf(t, "%d. %.90s", i + 1, rows[i]); view_add(t); }
+    }
+    view_add("");
+    view_add("Press ESC to close");
+}
+
 /** Runs one "/..." line. Returns 1 when the door should end. */
 static int run_command(const char *line)
 {
@@ -1336,6 +1610,14 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "invite", "uninvite")) { invite_typed(cmd[0] == 'i', rest); return 0; }
     if (strcmp(cmd, "reactions") == 0) { reactions_typed(rest); return 0; }
     if (is_cmd(cmd, "unreact", "love") || is_cmd(cmd, "thumbsup", "like")) { react_typed(cmd, rest); return 0; }
+    if (strcmp(cmd, "me") == 0) { me_typed(rest); return 0; }
+    if (strcmp(cmd, "delete") == 0) { delete_channel_typed(rest); return 0; }
+    if (strcmp(cmd, "events") == 0) { events_typed(rest); return 0; }
+    if (strcmp(cmd, "pin") == 0 || strcmp(cmd, "unpin") == 0) { pin_typed(cmd[0] == 'p', rest); return 0; }
+    if (is_cmd(cmd, "pinned", "pins")) { pinned_typed(); return 0; }
+    if (is_cmd(cmd, "search", "find")) { search_typed(rest); return 0; }
+    if (strcmp(cmd, "motd") == 0) { motd_typed(rest); return 0; }
+    if (strcmp(cmd, "customemoji") == 0) { customemoji_typed(rest); return 0; }
     system_line("Unknown command. Type /help for help.");
     return 0;
 }
@@ -1504,7 +1786,8 @@ static void ctx_run(const char *it)
         }
         else if (strcmp(it, "Edit") == 0) { sprintf(buf, "/edit %d ", l->number); input_set(buf); }
         else if (strcmp(it, "Delete") == 0) then_poll(ae_chat_delete(&chat, l->id));    /* TS: no confirm */
-        else not_yet(it);                /* Copy Text (OSC 52), Pin, Mark Unread */
+        else if (strcmp(it, "Pin Message") == 0) { sprintf(buf, "/pin %d", l->number); run_command(buf); }
+        else not_yet(it);                /* Copy Text (OSC 52), Mark Unread */
     } else if (M.ctx_kind == LC_CTX_REACT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
         int i;
@@ -1517,7 +1800,13 @@ static void ctx_run(const char *it)
         if (strcmp(it, "Join") == 0) join_room(r->id);
         else if (strcmp(it, "Leave") == 0) { if (strcmp(r->id, room_id) == 0) leave_room(); else system_line("You are not in that channel."); }
         else if (strcmp(it, "Info") == 0) { sprintf(buf, "Channel: %.40s", r->label); system_line(buf); }
-        else not_yet(it);                /* Expand/Collapse, Pin, Clear History, Archive, Delete Channel */
+        else if (strcmp(it, "Clear History") == 0 || strcmp(it, "Delete Channel") == 0) {     /* TS: sysop only */
+            int clear = it[0] == 'C';
+            if (!is_sysop) system_line("Sysop only.");
+            else if (clear) then_poll(ae_chat_room_clear(&chat, r->id));
+            else { ae_chat_room_delete(&chat, r->id); if (strcmp(r->id, room_id) == 0) leave_room(); load_sidebar(); }
+        }
+        else not_yet(it);                /* Expand/Collapse, Pin, Archive */
     }
 }
 
@@ -1560,7 +1849,7 @@ static int handle_mouse(void)
             continue;
         }
         if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) M.modal = LC_MODAL_NONE; continue; }
-        if (M.modal != LC_MODAL_NONE || M.help) continue;
+        if (M.modal != LC_MODAL_NONE || M.help || M.view) continue;
         if (hit == LC_HIT_MENU && idx >= 0) { M.menu = idx; M.menu_sel = 0; M.focus = LC_FOCUS_MENU; continue; }
         if (hit == LC_HIT_DROPDOWN && M.menu >= 0 && idx >= 0 && idx < lc_menu_count[M.menu]) {
             int menu = M.menu;
@@ -1602,7 +1891,14 @@ static int menu_pick(int menu, int item)
     else if (strcmp(it, "Clear Chat") == 0) lines_clear();
     else if (strcmp(it, "About") == 0) message_modal("LIVECHAT68", "Federated chat for AmiExpress boards");
     else if (strncmp(it, "Quit", 4) == 0) M.modal = LC_MODAL_QUIT;
-    else not_yet(it);                       /* Emoji, Files, Pins, Search, Threads, Settings, Theme, Render, Grid */
+    else if (strncmp(it, "Pins", 4) == 0) run_command("/pinned");
+    else if (strncmp(it, "Search", 6) == 0) input_set("/search ");
+    else if (strncmp(it, "Threads", 7) == 0) {
+        const lc_line *l = room_last();
+        if (l != 0 && l->id[0] != '\0') thread_view(l->id);
+        else system_line("Threads: use /threads or reply on any message to open the thread view.");
+    }
+    else not_yet(it);                       /* Emoji, Files, Settings, Theme, Render, Grid */
     return 0;
 }
 
@@ -1689,6 +1985,14 @@ static int handle_key(int key)
         else if (key == UI_KEY_PGDN) { M.help_top += 10; if (M.help_top > lc_help_lines - 1) M.help_top = lc_help_lines - 1; }
         else if (key == UI_KEY_PGUP) { M.help_top -= 10; if (M.help_top < 0) M.help_top = 0; }
         else M.help = 0;
+        return 0;
+    }
+    if (M.view) {
+        if (key == UI_KEY_DOWN && M.view_top < M.view_n - 1) M.view_top++;
+        else if (key == UI_KEY_UP && M.view_top > 0) M.view_top--;
+        else if (key == UI_KEY_PGDN) { M.view_top += 10; if (M.view_top > M.view_n - 1) M.view_top = M.view_n - 1; }
+        else if (key == UI_KEY_PGUP) { M.view_top -= 10; if (M.view_top < 0) M.view_top = 0; }
+        else M.view = 0;
         return 0;
     }
     if (M.modal == LC_MODAL_MESSAGE) { M.modal = LC_MODAL_NONE; return 0; }

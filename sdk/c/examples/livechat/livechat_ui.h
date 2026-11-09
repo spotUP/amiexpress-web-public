@@ -39,6 +39,9 @@ enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE };
    TS door keeps the same per-message map (features/reaction-store.ts); this door paints it on its
    own row under the message, "<3 2  :) 1" in the accent colour (lc_react_rows). */
 #define LC_REACT_MAX 8
+#define LC_VIEW_MAX 40
+#define LC_VIEW_COL 100
+
 typedef struct {
     char emoji[12];        /* the server's name: "+1", "heart", ... */
     int count;
@@ -101,6 +104,11 @@ typedef struct {
     int menu_sel;
     int help;                      /* help overlay shown */
     int help_top;
+    int view;                      /* text overlay shown (the thread view) */
+    int view_top;
+    int view_n;                    /* lines held in view_text */
+    char view_title[32];
+    char view_text[LC_VIEW_MAX][LC_VIEW_COL];   /* a line starting '=' draws as a heading, like the help text */
     int modal;
     char modal_title[24];          /* "Error", or the prompt's question */
     char modal_text[96];

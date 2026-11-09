@@ -763,6 +763,190 @@ int ae_chat_thread_list(ae_chat *c, const char *msg_id, int limit)
     return get_text(c, path);
 }
 
+/* ------------------------------------------------- Phase A: pins, search, emoji, motd, rooms */
+
+/* The hub answers pins, search and emoji as JSON arrays only (router.ts: no .txt variants), so the reply
+ * is rewritten in place as pipe rows and read with ae_chat_next_row like every list. `keys` name the
+ * object fields, in column order; a number is written as digits, a missing field as "". A '|' in a value
+ * becomes '!' and a line break a space, as the text routes do. An object cut off by the reply buffer
+ * (long emoji data URLs) ends the list. */
+#define ROW_OBJ_MAX 1536
+
+static char rows_out[AE_CHAT_REPLY_MAX];
+
+static void json_to_rows(ae_chat *c, const char *const *keys, int nkeys)
+{
+    unsigned long at = 0, out = 0;
+    char obj[ROW_OBJ_MAX];
+    const char *p = strchr(c->reply, '[');
+
+    if (p != 0) at = (unsigned long)(p - c->reply) + 1;
+    else at = c->reply_len;
+    while (at < c->reply_len) {
+        unsigned long start, n;
+        int depth = 0, in_str = 0, i;
+        const char *q = c->reply + at;
+        char *o;
+
+        while (*q != '\0' && *q != '{') q++;
+        if (*q == '\0') break;
+        start = (unsigned long)(q - c->reply);
+        for (n = start; n < c->reply_len; n++) {
+            char ch = c->reply[n];
+            if (in_str) { if (ch == '\\') n++; else if (ch == '"') in_str = 0; continue; }
+            if (ch == '"') in_str = 1;
+            else if (ch == '{') depth++;
+            else if (ch == '}' && --depth == 0) break;
+        }
+        if (n >= c->reply_len) break;               /* cut off */
+        {
+            unsigned long len = n - start + 1;
+            if (len >= sizeof obj) len = sizeof obj - 1;
+            memcpy(obj, c->reply + start, len);
+            obj[len] = '\0';
+        }
+        at = n + 1;
+        for (i = 0; i < nkeys; i++) {
+            char val[AE_CHAT_TEXT_MAX + 1];
+            int num;
+            val[0] = '\0';
+            if (json_extract_string(obj, keys[i], val, sizeof val) != 0 || val[0] == '\0') {
+                if (json_extract_bool(obj, keys[i], &num) == 0) sprintf(val, "%d", num);
+                else val[0] = '\0';
+            }
+            for (o = val; *o != '\0'; o++) {
+                if (*o == '|') *o = '!';
+                else if (*o == '\n' || *o == '\r') *o = ' ';
+            }
+            if (out + strlen(val) + 2 >= sizeof rows_out) { i = nkeys; at = c->reply_len; break; }
+            memcpy(rows_out + out, val, strlen(val));
+            out += strlen(val);
+            rows_out[out++] = i + 1 < nkeys ? '|' : '\n';
+        }
+    }
+    memcpy(c->reply, rows_out, out);
+    c->reply[out] = '\0';
+    c->reply_len = out;
+    c->cursor = 0;
+}
+
+int ae_chat_pins(ae_chat *c, const char *room)
+{
+    static const char *const keys[] = { "messageId", "user", "content", "pinnedBy", "at" };
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/pins");
+
+    if (rc != AE_CHAT_OK) return rc;
+    rc = call(c, "GET", path, 0, 0);
+    if (rc == AE_CHAT_OK) json_to_rows(c, keys, 5);
+    return rc;
+}
+
+int ae_chat_pin(ae_chat *c, const char *room, const char *msg_id, int pin)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    long at;
+    int rc;
+
+    if (blank(msg_id)) return AE_CHAT_ERR_ARGS;
+    if (!pin) {
+        char tail[200];
+        char esc[160];
+        if (ae_req_url_escape(msg_id, esc, sizeof esc) < 0) return AE_CHAT_ERR_TOO_LONG;
+        sprintf(tail, "/pins/%s", esc);
+        rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, tail);
+        if (rc != AE_CHAT_OK) return rc;
+        return call(c, "DELETE", path, 0, 0);
+    }
+    rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/pins");
+    if (rc != AE_CHAT_OK) return rc;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "messageId", msg_id);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "POST", path, body, (unsigned long)at);
+}
+
+int ae_chat_search(ae_chat *c, const char *query, const char *room, int limit)
+{
+    static const char *const keys[] = { "id", "room", "user", "at", "content" };
+    char path[PATH_MAX_LEN];
+    char esc[160];
+    char tail[40];
+    int rc;
+
+    if (blank(query)) return AE_CHAT_ERR_ARGS;
+    if (limit < 1) limit = 20;
+    if (ae_req_url_escape(query, esc, sizeof esc) < 0) return AE_CHAT_ERR_TOO_LONG;
+    sprintf(tail, "&limit=%d", limit);
+    if (strlen(AE_CHAT_BASE "/search?q=") + strlen(esc) + strlen(tail) + 1 >= sizeof path) return AE_CHAT_ERR_TOO_LONG;
+    sprintf(path, "%s%s%s", AE_CHAT_BASE "/search?q=", esc, tail);
+    if (!blank(room)) {
+        char resc[160];
+        if (ae_req_url_escape(room, resc, sizeof resc) < 0 || strlen(path) + strlen(resc) + 8 >= sizeof path)
+            return AE_CHAT_ERR_TOO_LONG;
+        sprintf(path + strlen(path), "&room=%s", resc);
+    }
+    rc = call(c, "GET", path, 0, 0);
+    if (rc == AE_CHAT_OK) json_to_rows(c, keys, 5);
+    return rc;
+}
+
+int ae_chat_emoji_list(ae_chat *c)
+{
+    static const char *const keys[] = { "name" };
+    int rc = call(c, "GET", AE_CHAT_BASE "/emoji", 0, 0);
+
+    if (rc == AE_CHAT_OK) json_to_rows(c, keys, 1);
+    return rc;
+}
+
+int ae_chat_emoji_remove(ae_chat *c, const char *name)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/emoji/", name, "");
+
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "DELETE", path, 0, 0);
+}
+
+int ae_chat_motd(ae_chat *c, char *text, int cap)
+{
+    int rc = call(c, "GET", AE_CHAT_BASE "/motd", 0, 0);
+
+    if (rc == AE_CHAT_OK && text != 0 && cap > 0 && json_extract_string(c->reply, "text", text, (unsigned long)cap) != 0)
+        text[0] = '\0';
+    return rc;
+}
+
+int ae_chat_motd_set(ae_chat *c, const char *text)
+{
+    char body[BODY_MAX + AE_CHAT_TEXT_MAX * 6];
+    long at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "text", text ? text : "");
+
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "PUT", AE_CHAT_BASE "/motd", body, (unsigned long)at);
+}
+
+int ae_chat_room_delete(ae_chat *c, const char *room)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "");
+
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "DELETE", path, 0, 0);
+}
+
+int ae_chat_room_clear(ae_chat *c, const char *room)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/clear");
+
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "POST", path, "{}", 2);
+}
+
 int ae_chat_dm(ae_chat *c, const char *peer, const char *text, char *thread_id, int cap)
 {
     char path[PATH_MAX_LEN];

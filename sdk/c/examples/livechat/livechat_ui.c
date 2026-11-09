@@ -510,7 +510,7 @@ const char *const lc_cmd_help[][4] = {
     {"who", "users,list", "List users in channel", "/who"},
     {"compact", "", "Toggle compact mode", "/compact"},
     {"timestamps", "time", "Toggle timestamps", "/timestamps"},
-    /* The rest of the TS registry (board/Doors/livechat/commands, one file per group). The door does not run these yet: they fall to the unknown-command path. */
+    /* The rest of the TS registry (board/Doors/livechat/commands, one file per group). Phase A runs me, delete, events, pin, unpin, pinned, search, motd and customemoji; the others fall to the unknown-command path. */
     {"delete", "", "Delete a channel", "/delete #channel"},
     {"emoji", "", "Open emoji picker or search emojis", "/emoji [search]"},
     {"emojis", "", "List all emojis or emojis in a category", "/emojis [category]"},
@@ -679,6 +679,22 @@ static void draw_help(ui_cells *c, const lc_model *m)
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
 }
 
+/** The text overlay (TS overlays/thread-view.ts): a box titled view_title, view_text scrolled from view_top. */
+static void draw_view(ui_cells *c, const lc_model *m)
+{
+    int top, left, h = c->rows - 2, w = c->cols - 4, i;
+    if (w > 76) w = 76;
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_modal(c, h, w, LC_ACCENT, m->view_title, LC_INK, &top, &left);
+    for (i = 0; i < h - 2 && m->view_top + i < m->view_n; i++) {
+        const char *t = m->view_text[m->view_top + i];
+        int head = t[0] == '=';
+        ui_cells_pen(c, head ? LC_ACCENT : LC_INK, UI_CELLS_DEFAULT, head);
+        ui_cells_text(c, top + 1 + i, left + 2, head ? t + 1 : t, w - 4);
+    }
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+}
+
 static void draw_modal(ui_cells *c, const lc_model *m, int *cr, int *cc)
 {
     int top, left, w = 50;
@@ -744,6 +760,7 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
         ui_hit_add(&lc_hits, LC_HIT_POPUP, m->ctx.top, m->ctx.left, m->ctx.n + 2, m->ctx.w);
     }
     if (m->help) draw_help(c, m);
+    if (m->view) draw_view(c, m);
     if (m->modal != LC_MODAL_NONE) draw_modal(c, m, cursor_row, cursor_col);
 }
 

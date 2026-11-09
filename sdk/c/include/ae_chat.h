@@ -199,6 +199,33 @@ int ae_chat_ignores(ae_chat *c);
 /** add: POST /ignores {user}; else DELETE /ignores/:user. `user` is "handle@BOARD". */
 int ae_chat_ignore(ae_chat *c, const char *user, int add);
 
+/** GET /rooms/:id/pins (JSON on the wire, read here as rows): messageId, user, content, pinnedBy, at. */
+int ae_chat_pins(ae_chat *c, const char *room);
+
+/** pin: POST /rooms/:id/pins {messageId}; else DELETE /rooms/:id/pins/:messageId. Needs room op. */
+int ae_chat_pin(ae_chat *c, const char *room, const char *msg_id, int pin);
+
+/** GET /search?q=&room=&limit= (room may be NULL). Rows: id, roomName, user, at, content. */
+int ae_chat_search(ae_chat *c, const char *query, const char *room, int limit);
+
+/** GET /emoji. Rows: name only (the data URLs do not fit the reply buffer). */
+int ae_chat_emoji_list(ae_chat *c);
+
+/** DELETE /emoji/:name. Sysop only. */
+int ae_chat_emoji_remove(ae_chat *c, const char *name);
+
+/** GET /motd: the board-wide message of the day into text (empty when none). */
+int ae_chat_motd(ae_chat *c, char *text, int cap);
+
+/** PUT /motd {text}; empty text clears. Sysop only. */
+int ae_chat_motd_set(ae_chat *c, const char *text);
+
+/** DELETE /rooms/:id. */
+int ae_chat_room_delete(ae_chat *c, const char *room);
+
+/** POST /rooms/:id/clear. */
+int ae_chat_room_clear(ae_chat *c, const char *room);
+
 /**
  * Next row of the last list reply, split on `|` with `!` turned back into
  * `|`. Fills fields[0..max-1] (missing trailing fields point at ""), returns

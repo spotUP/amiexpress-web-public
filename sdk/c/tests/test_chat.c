@@ -462,7 +462,7 @@ static void test_door_reply(void)
 {
     int i, bob = -1, live = -1;
     start_stub();
-    assert(drive(KEYS("\r" "/reply\r" "/thread 1\r" "/r 1 yes alice\r"), 0) == 0);
+    assert(drive(KEYS("\r" "/reply\r" "/thread\r" "/r 1 yes alice\r"), 0) == 0);
     assert(st->messages == 1 && strcmp(st->last_message, "yes alice") == 0);
     assert(strstr(st->last_write_body, "\"replyTo\":\"m1\"") != 0);            /* the line number named m1 */
     assert(has_line(0, "Usage: /reply [msg-id] message") && has_line(0, "Usage: /thread <msg-id> message"));
@@ -630,6 +630,48 @@ static void test_door_moderation(void)
     assert(st->reaction_lists >= 1 && has_line(0, "Reactions on 1: ["));
     assert(has_line(0, "No such message number."));
     printf("  [OK] door: edit, topic, kick, mute, deop, invite and reactions reach the server and their events the pane\n");
+}
+
+/* Phase A: /me /delete /events /pin /unpin /pinned /search /motd /customemoji and the thread view. */
+static void test_door_phase_a(void)
+{
+    int i, found = 0;
+    start_stub();
+    drive(KEYS("\r" "/me waves\r" "/me\r" "/pin\r" "/pin m1\r" "/unpin m1\r" "/search a\r" "/search hello\r"
+               "/motd\r" "/motd Be nice\r" "/motd\r" "/motd --clear\r"
+               "/customemoji list\r" "/customemoji remove party\r" "/customemoji add x y z\r"
+               "/events\r" "/events logins\r" "/events off\r" "/events bogus\r" "/events on\r"
+               "/delete\r" "/delete #nosuch\r" "/delete #Secret\r"), 0);
+    assert(strcmp(st->last_message, "ACTION: * Tester waves") == 0);
+    assert(has_line(0, "Error: Usage: /me does something"));
+    assert(has_line(0, "Error: Usage: /pin <msg-id>"));
+    assert(st->pin_calls == 2 && has_line(0, "Pin requested.") && has_line(0, "Unpin requested."));
+    assert(has_line(0, "Search query must be at least 2 characters"));
+    assert(has_line(0, "Found 1 result for \"hello\"") && has_line(0, "alice: hello there"));
+    assert(has_line(0, "No MOTD set. Use /motd <text> to set, /motd --clear to clear."));
+    assert(has_line(0, "[MOTD] Be nice"));
+    assert(has_line(0, "Custom emoji (1):") && has_line(0, ":party:"));
+    assert(st->emoji_calls >= 1);
+    assert(has_line(0, "BBS Event Display Settings:") && has_line(0, "  User Logins/Logouts:     ON"));
+    assert(has_line(0, "Login/logout events: OFF") && has_line(0, "All BBS events disabled"));
+    assert(has_line(0, "Unknown event type: bogus") && has_line(0, "All BBS events enabled"));
+    assert(has_line(0, "Error: Usage: /delete #channel") && has_line(0, "Not found."));
+    assert(st->room_admin_calls == 1 && strstr(st->last_write_path, "/rooms/secret") != 0);
+    stop_stub();
+    printf("  [OK] door: /me /pin /unpin /search /motd /customemoji /events /delete reach the server and print the TS texts\n");
+
+    start_stub();
+    drive(KEYS("\r" "/pinned\r"), 0);
+    assert(M.view && strcmp(M.view_title, "Pinned Messages") == 0 && st->pin_calls == 0);
+    for (i = 0; i < M.view_n; i++) if (strstr(M.view_text[i], "alice: hello there") != 0) found = 1;
+    assert(found);
+    drive(KEYS("\x1b"), 0);
+    assert(!M.view);
+    drive(KEYS("/thread 1\r"), 0);
+    assert(st->thread_views == 1 && M.view && strcmp(M.view_title, "Thread") == 0);
+    assert(strcmp(M.view_text[0], "=Original Message:") == 0 && strstr(M.view_text[1], "alice: hello there") != 0);
+    stop_stub();
+    printf("  [OK] door: /pinned and /thread <n> open the text overlay, a key closes it\n");
 }
 
 /* B2: delete by default takes the caller's last line; a kick of the caller leaves the room; low levels are refused. */
@@ -926,6 +968,7 @@ int main(void)
     test_door_scrollbar_drag();
     test_door_reply();
     test_door_moderation();
+    test_door_phase_a();
     test_door_b3();
     test_door_picker_and_edit();
     test_door_react_without_event();
