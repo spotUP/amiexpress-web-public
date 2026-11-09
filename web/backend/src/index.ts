@@ -1101,6 +1101,7 @@ const { setChatFederationDependencies, handleFederatedChatEvent } = require("./s
 const { setLegacyChatGate } = require("./server/socket-guard");
 setChatFederationDependencies({ getConfig: () => db.getConfigRepository().getSystemConfig(), io }); // config-source-ok: federation reads the board key, server url and livechat_federated, which live only in the database
 setLegacyChatGate(handleFederatedChatEvent);
+require("./services/chat-federation/bbs-event-relay").startBbsEventRelay({ getConfig: () => db.getConfigRepository().getSystemConfig() }); // config-source-ok: the relay reads the board key and server url, which live only in the database
 setRoomCommandsDependencies({
   db,
   sessions,

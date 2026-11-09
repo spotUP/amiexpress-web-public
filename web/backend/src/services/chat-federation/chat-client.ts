@@ -206,6 +206,10 @@ export class ChatClient {
     return parseTextRows(r.body, format);
   }
 
+  /** Relay one of this board's BBS events (POST /bbs-events); only this board's chat sessions see it. */
+  async relayBbsEvent(event: { type: string; username: string; nodeId: number; data?: Record<string, unknown> }): Promise<void> {
+    await this.json('POST', '/bbs-events', null, event);
+  }
   openSession(handle: string, sysop: boolean, client = 'amiexpress-web'): Promise<ChatSessionReply> {
     return this.json('POST', '/sessions', null, { handle, sysop, client });
   }

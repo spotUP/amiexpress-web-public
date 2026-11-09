@@ -71,6 +71,7 @@ export async function startChatStub(): Promise<ChatStub> {
         return;
       }
       if (req.method === 'PUT' && p === '/presence') { res.writeHead(204); return void res.end(); }
+      if (req.method === 'POST' && p === '/bbs-events') { res.writeHead(204); return void res.end(); }
       if (req.method === 'DELETE' && p === '/presence') { res.writeHead(204); return void res.end(); }
       if (req.method === 'GET' && /^\/users\/[^/]+\/profile\.txt$/.test(p)) return text('PROFILE|1|1|1\r\nbob@TEST|bob@TEST|TEST|online|Bob the builder|1|2|0|1|1\r\n');
       if (req.method === 'GET' && p === '/ignores.txt') return text(`IGNORES|1|1|${ignored.length}\r\n${ignored.map((u) => `${u}|1\r\n`).join('')}`);
