@@ -211,7 +211,10 @@ typedef enum {
     AE_FIELD_CHARSET        = 11100, /* AEW_CHARSET */
 
     /* A sysop note about a user (AEW_USERNOTE); see ae_usernote.h. */
-    AE_FIELD_USERNOTE       = 11200  /* AEW_USERNOTE */
+    AE_FIELD_USERNOTE       = 11200, /* AEW_USERNOTE */
+
+    /* The caller's LiveChat prefs (AEW_CHATPREFS); see ae_chatprefs.h. */
+    AE_FIELD_CHATPREFS      = 11300  /* AEW_CHATPREFS */
 } ae_field;
 
 /**

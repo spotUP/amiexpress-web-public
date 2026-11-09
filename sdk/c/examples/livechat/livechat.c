@@ -42,6 +42,7 @@
 #include "aedoor.h"
 #include "ae_board_screen.h"
 #include "ae_chat.h"
+#include "ae_chatprefs.h"
 #include "ae_host.h"
 #include "ae_http.h"
 #include "ae_net.h"
@@ -456,7 +457,7 @@ static void open_help(void)
 static void present(void)
 {
     int cr = 0, cc = 0;
-    int caret = M.focus == LC_FOCUS_INPUT && !M.help && !M.view && M.menu < 0
+    int caret = M.focus == LC_FOCUS_INPUT && !M.help && !M.view && M.menu < 0 && !M.settings
                 && (M.modal == LC_MODAL_NONE || M.modal == LC_MODAL_PROMPT);
     lc_draw(&cells, &M, &cr, &cc);
     ui_cells_flush(&cells, &screen.buf, drain, 0);
@@ -1670,6 +1671,153 @@ static void events_typed(const char *rest)
     system_line(t);
 }
 
+/* ---- settings overlay and stored prefs: TS overlays/settings.ts, prefs-sync.ts, AEW_CHATPREFS ---- */
+
+static int is_enter(int key);
+static int snd_on = 1;                           /* TS notificationSound/mentionSound (= !muteSounds) */
+static int show_typing = 1;                      /* TS showTypingIndicators: never stored by the TS door either */
+
+static void pref_set_bool(const char *key, int v) { ae_chat_prefs_set(key, v ? "1" : "0"); }
+
+/** TS saveSettings(prefsAsCheckboxes(...)): every boolean the TS door stores. */
+static void prefs_save(void)
+{
+    pref_set_bool("showLogins", ev_logins);
+    pref_set_bool("showFileActivity", ev_files);
+    pref_set_bool("showDoorActivity", ev_doors);
+    pref_set_bool("showMessages", ev_messages);
+    pref_set_bool("showSystemAnnouncements", ev_announce);
+    pref_set_bool("notificationSound", snd_on);
+    pref_set_bool("mentionSound", snd_on);
+    pref_set_bool("showTimestamps", M.timestamps);
+    pref_set_bool("compactMode", M.compact);
+    pref_set_bool("muteAllEvents", ev_mute_all);
+}
+
+/** TS togglePinnedChannel: the hub stores pinned channels by name, comma separated. */
+static void pins_save(void)
+{
+    char list[200];
+    int i, j, len = 0;
+    list[0] = '\0';
+    for (i = 0; i < pinned_rooms.n; i++)
+        for (j = 0; j < rooms_count; j++)
+            if (strcmp(rooms_id[j], pinned_rooms.id[i]) == 0) {
+                int n = (int)strlen(rooms_name[j]);
+                if (len + n + 2 > (int)sizeof list) break;     /* the 198-byte wire cap */
+                if (len > 0) list[len++] = ',';
+                strcpy(list + len, rooms_name[j]);
+                len += n;
+            }
+    ae_chat_prefs_set("pinnedChannels", list);
+}
+
+/** TS chat:prefs at start + applyServerPrefs: the stored booleans, then pinned names -> the rooms' ids. */
+static void prefs_load(void)
+{
+    char line[200], pins[200];
+    const char *p;
+    if (ae_chat_prefs_get(line, sizeof line) > 0) {
+        ev_logins = ae_chat_prefs_bool(line, "showLogins", ev_logins);
+        ev_files = ae_chat_prefs_bool(line, "showFileActivity", ev_files);
+        ev_doors = ae_chat_prefs_bool(line, "showDoorActivity", ev_doors);
+        ev_messages = ae_chat_prefs_bool(line, "showMessages", ev_messages);
+        ev_announce = ae_chat_prefs_bool(line, "showSystemAnnouncements", ev_announce);
+        snd_on = ae_chat_prefs_bool(line, "notificationSound", snd_on);
+        M.timestamps = ae_chat_prefs_bool(line, "showTimestamps", M.timestamps);
+        M.compact = ae_chat_prefs_bool(line, "compactMode", M.compact);
+        events_sync();
+    }
+    if (ae_chat_prefs_get_pinned(pins, sizeof pins) <= 0) return;
+    for (p = pins; *p != '\0';) {
+        char name[40];
+        int n = 0, j;
+        while (*p != '\0' && *p != ',') { if (n + 1 < (int)sizeof name) name[n++] = *p; p++; }
+        name[n] = '\0';
+        if (*p == ',') p++;
+        for (j = 0; j < rooms_count; j++)
+            if (strcmp(rooms_name[j], name) == 0 && idset_find(&pinned_rooms, rooms_id[j]) < 0) idset_put(&pinned_rooms, rooms_id[j]);
+    }
+}
+
+/** /sounds on|off: TS commands/handlers.ts, saved as notificationSound + mentionSound. */
+static void sounds_typed(const char *rest)
+{
+    char w[8];
+    arg_word(rest, w, sizeof w);
+    if (strcmp(w, "on") != 0 && strcmp(w, "off") != 0) { usage("/sounds on|off"); return; }
+    snd_on = w[1] == 'n';
+    prefs_save();
+    system_line(snd_on ? "Sounds enabled" : "Sounds disabled");
+}
+
+/** The caller's own presence from the users sidebar: 0 online, 1 away, 2 busy, 3 dnd. */
+static int own_status(void)
+{
+    int i;
+    for (i = 0; i < M.nside; i++)
+        if (M.side[i].kind == LC_SIDE_USER && strcmp(M.side[i].label, M.handle) == 0)
+            return M.side[i].status == 'a' ? 1 : M.side[i].status == 'b' ? 2 : M.side[i].status == 'd' ? 3 : 0;
+    return 0;
+}
+
+/** Ctrl+S, /settings, View > Settings. The TS overlay resets its boxes to defaults on open; this shows the
+    current values instead. */
+static void settings_open(void)
+{
+    M.settings = 1;
+    M.settings_sel = 0;
+    M.settings_val[LC_SET_LOGINS] = ev_logins;
+    M.settings_val[LC_SET_FILES] = ev_files;
+    M.settings_val[LC_SET_DOORS] = ev_doors;
+    M.settings_val[LC_SET_MESSAGES] = ev_messages;
+    M.settings_val[LC_SET_ANNOUNCE] = ev_announce;
+    M.settings_val[LC_SET_MUTE] = !snd_on;
+    M.settings_val[LC_SET_TYPING] = show_typing;
+    M.settings_val[LC_SET_STAMPS] = M.timestamps;
+    M.settings_status = own_status();
+}
+
+/** TS overlay destroy: the boxes become the prefs, then saveSettings. */
+static void settings_close(void)
+{
+    M.settings = 0;
+    ev_logins = M.settings_val[LC_SET_LOGINS];
+    ev_files = M.settings_val[LC_SET_FILES];
+    ev_doors = M.settings_val[LC_SET_DOORS];
+    ev_messages = M.settings_val[LC_SET_MESSAGES];
+    ev_announce = M.settings_val[LC_SET_ANNOUNCE];
+    snd_on = !M.settings_val[LC_SET_MUTE];
+    show_typing = M.settings_val[LC_SET_TYPING];
+    M.timestamps = M.settings_val[LC_SET_STAMPS];
+    events_sync();
+    prefs_save();
+}
+
+/** Space/Enter or a click on an item: a box toggles, a status applies at once (TS radio change ->
+    presenceService.setStatus), Close saves and closes. */
+static void settings_pick(int item)
+{
+    static const char *const words[] = { "online", "away", "busy", "dnd" };
+    if (item < 0 || item >= LC_SET_ITEMS) return;
+    M.settings_sel = item;
+    if (item <= LC_SET_STAMPS) M.settings_val[item] = !M.settings_val[item];
+    else if (item <= LC_SET_DND) {
+        int rc = ae_chat_presence(&chat, words[item - LC_SET_ONLINE], "");
+        if (rc != AE_CHAT_OK) { show_error(rc); return; }
+        M.settings_status = item - LC_SET_ONLINE;
+        do_poll();
+    } else settings_close();
+}
+
+static void settings_key(int key)
+{
+    if (key == UI_KEY_ESC) settings_close();
+    else if (key == UI_KEY_UP || key == UI_KEY_BACKTAB) M.settings_sel = (M.settings_sel + LC_SET_ITEMS - 1) % LC_SET_ITEMS;
+    else if (key == UI_KEY_DOWN || key == 9) M.settings_sel = (M.settings_sel + 1) % LC_SET_ITEMS;
+    else if (key == ' ' || is_enter(key)) settings_pick(M.settings_sel);
+}
+
 /** /me: TS sends `ACTION: * user text` to the room. */
 static void me_typed(const char *rest)
 {
@@ -2014,8 +2162,10 @@ static int run_command(const char *line)
         if (a[0] != '\0') help_for(a[0] == '/' ? a + 1 : a); else open_help();
         return 0;
     }
-    if (strcmp(cmd, "compact") == 0) { M.compact = !M.compact; system_line(M.compact ? "Compact mode on" : "Compact mode off"); return 0; }
-    if (is_cmd(cmd, "timestamps", "time")) { M.timestamps = !M.timestamps; system_line(M.timestamps ? "Timestamps on" : "Timestamps off"); return 0; }
+    if (strcmp(cmd, "compact") == 0) { M.compact = !M.compact; prefs_save(); system_line(M.compact ? "Compact mode on" : "Compact mode off"); return 0; }
+    if (is_cmd(cmd, "timestamps", "time")) { M.timestamps = !M.timestamps; prefs_save(); system_line(M.timestamps ? "Timestamps on" : "Timestamps off"); return 0; }
+    if (strcmp(cmd, "settings") == 0) { settings_open(); return 0; }
+    if (strcmp(cmd, "sounds") == 0) { sounds_typed(rest); return 0; }
     if (is_cmd(cmd, "l", "rooms") || strcmp(cmd, "list") == 0) { list_rooms(); return 0; }
     if (is_cmd(cmd, "w", "who")) { list_who(); return 0; }
     if (is_cmd(cmd, "j", "join")) { join_typed(rest); return 0; }
@@ -2456,6 +2606,7 @@ static void ctx_run(const char *it)
             int pin = idset_find(&pinned_rooms, r->id) < 0;
             sprintf(buf, "%s %.40s", pin ? "Pinned" : "Unpinned", r->label);
             if (pin) idset_put(&pinned_rooms, r->id); else idset_drop(&pinned_rooms, r->id);
+            pins_save();                                             /* TS togglePinnedChannel -> prefsSender */
             accent_line(buf);
             load_sidebar();
         }
@@ -2523,6 +2674,10 @@ static int handle_mouse(void)
             continue;
         }
         if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) M.modal = LC_MODAL_NONE; continue; }
+        if (M.settings) {                       /* a click on an item picks it, as Space does */
+            if (hit == LC_HIT_SETTINGS_ROW) settings_pick(idx);
+            continue;
+        }
         if (M.search) {                         /* TS: a click on a field focuses it; a click on a result selects it */
             if (hit == LC_HIT_SEARCH_Q) M.search_field = 0;
             else if (hit == LC_HIT_SEARCH_USER) M.search_field = 1;
@@ -2583,7 +2738,8 @@ static int menu_pick(int menu, int item)
         else system_line("Threads: use /threads or reply on any message to open the thread view.");
     }
     else if (strncmp(it, "Emoji", 5) == 0) emoji_show();
-    else not_yet(it);                       /* Files, Settings, Theme, Render, Grid */
+    else if (strncmp(it, "Settings", 8) == 0) settings_open();
+    else not_yet(it);                       /* Files, Theme, Render, Grid */
     return 0;
 }
 
@@ -2681,6 +2837,7 @@ static int handle_key(int key)
         return 0;
     }
     if (M.search) { search_key(key); return 0; }
+    if (M.settings) { settings_key(key); return 0; }
     if (M.modal == LC_MODAL_MESSAGE) { M.modal = LC_MODAL_NONE; return 0; }
     if (M.modal == LC_MODAL_QUIT) {
         if (key == 'y' || key == 'Y' || is_enter(key)) return 1;
@@ -2705,6 +2862,7 @@ static int handle_key(int key)
     }
     if (M.fmt) { fmt_key(key); return 0; }
     if (key == 17) { M.modal = LC_MODAL_QUIT; return 0; }
+    if (key == 19) { settings_open(); return 0; }  /* TS: Ctrl+S opens the settings */
     if (key == 6) { search_open(); return 0; }     /* TS: Ctrl+F opens the message search */
     if (M.focus == LC_FOCUS_INPUT && M.pick[0] == '\0' && slash_key(key)) return 0;
     if (key == UI_KEY_F1) { open_help(); return 0; }
@@ -2874,6 +3032,7 @@ int main(int argc, char **argv)
     idle_ticks = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
     room_id[0] = '\0'; room_name[0] = '\0'; room_topic[0] = '\0'; dm_thread[0] = '\0'; dm_peer[0] = '\0';
     nignored = 0; nmuted = 0; nblocked = 0;
+    snd_on = 1; show_typing = 1; ev_logins = ev_files = ev_doors = ev_messages = ev_announce = 1; ev_mute_all = 0;
     pinned_rooms.n = expanded_rooms.n = collapsed_rooms.n = unread_rooms.n = 0;
     fmt_wait = 0; fmt_seen_a = fmt_seen_b = -1;
 
@@ -2941,6 +3100,7 @@ int main(int argc, char **argv)
     load_ignores();                                     /* the server keeps the list; hiding the lines is ours */
     /* As the TS door: list the rooms and walk into the first. */
     if (load_rooms() == AE_CHAT_OK) {
+        prefs_load();                                /* TS chat:prefs: stored prefs, pinned names -> ids */
         sprintf(line, "Found %d room%s", rooms_count, rooms_count == 1 ? "" : "s");
         system_line(line);
         if (rooms_count > 0) {

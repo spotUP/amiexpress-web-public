@@ -1382,6 +1382,81 @@ static void draw_search(ui_cells *c, const lc_model *m, int *cr, int *cc)
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
 }
 
+static const char *const set_label[LC_SET_ITEMS] = {
+    "Show User Logins/Logouts", "Show File Uploads/Downloads", "Show Door Activity",
+    "Show New Messages", "Show System Announcements",
+    "Mute Sounds", "Show Typing Indicators", "Show Timestamps",
+    "Online", "Away", "Busy", "Do Not Disturb", "Close" };
+static int set_item_at[64];                 /* the last frame's interior row -> LC_SET_* (-1 a gap) */
+
+const char *lc_settings_label(int item) { return item >= 0 && item < LC_SET_ITEMS ? set_label[item] : ""; }
+
+/* TS places the rows at fixed offsets (events at 2, prefs two apart, the radio under "Status:", Close
+   at bottom 1) that need 24 interior rows, more than its own 22-row ceiling holds, so its radio and
+   Close overlap. Here the same rows in the same order keep the TS gaps while they fit and give them
+   up, last-listed first, when they do not: 16 interior rows hold every item. */
+void lc_settings_layout(int cols, int rows, int *h, int *w, int row[LC_SET_ITEMS], int *head, int *rule, int *status)
+{
+    int ih, extra, r, i;
+    int pad_bottom, pad_top, gap_ev, gap_pref, gap_rule, gap_radio;
+    *w = cols - 4 < 20 ? 20 : cols - 4; if (*w > 72) *w = 72; if (*w > cols) *w = cols;
+    *h = rows - 4 < 18 ? 18 : rows - 4; if (*h > 22) *h = 22; if (*h > rows) *h = rows;
+    ih = *h - 2;
+    extra = ih - 16; if (extra < 0) extra = 0;
+#define TAKE(v, n) do { v = extra < (n) ? extra : (n); extra -= v; } while (0)
+    TAKE(pad_bottom, 1); TAKE(gap_radio, 1); TAKE(gap_ev, 1); TAKE(gap_rule, 1); TAKE(pad_top, 2); TAKE(gap_pref, 2);
+#undef TAKE
+    r = pad_top;
+    *head = r++;
+    for (i = LC_SET_LOGINS; i <= LC_SET_ANNOUNCE; i++) row[i] = r++;
+    r += gap_ev;
+    row[LC_SET_MUTE] = r++; if (gap_pref > 0) r++;
+    row[LC_SET_TYPING] = r++; if (gap_pref > 1) r++;
+    row[LC_SET_STAMPS] = r++;
+    r += gap_rule;
+    *rule = r++;
+    *status = r++;
+    r += gap_radio;
+    for (i = LC_SET_ONLINE; i <= LC_SET_DND; i++) row[i] = r++;
+    row[LC_SET_CLOSE] = ih - 1 - pad_bottom;
+}
+
+static void draw_settings(ui_cells *c, const lc_model *m)
+{
+    int h, w, top, left, row[LC_SET_ITEMS], head, rule, status, i, l;
+    char t[80];
+    lc_settings_layout(c->cols, c->rows, &h, &w, row, &head, &rule, &status);
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_modal(c, h, w, LC_ACCENT, "Settings", LC_INK, &top, &left);
+    ui_hit_add(&lc_hits, LC_HIT_SETTINGS, top, left, h, w);
+    for (i = 0; i < 64; i++) set_item_at[i] = -1;
+    top++; left++;                                  /* the interior: TS top/left are inside the border */
+    l = left + 2;
+    ui_cells_pen(c, LC_ACCENT, UI_CELLS_DEFAULT, 0);
+    ui_cells_text(c, top + head, l, "BBS Events:", w - 6);
+    for (i = 0; i < LC_SET_ITEMS; i++) {
+        int x = i <= LC_SET_ANNOUNCE ? l + 2 : l, sel = m->settings_sel == i;
+        if (i == LC_SET_CLOSE) {                    /* blessed.button bottom 1, centre, width 12, bg T.bar, focus bg accent */
+            int bx = left + (w - 2 - 12) / 2;
+            ui_cells_pen(c, LC_INK, sel ? LC_ACCENT : LC_EV_BAR, 0);
+            ui_cells_fill(c, top + row[i], bx, 1, 12, ' ');
+            ui_cells_text(c, top + row[i], bx, set_label[i], 12);
+        } else {
+            if (i <= LC_SET_STAMPS) sprintf(t, "[%c] %s", m->settings_val[i] ? 'X' : ' ', set_label[i]);
+            else sprintf(t, "(%c) %s", m->settings_status == i - LC_SET_ONLINE ? 'O' : ' ', set_label[i]);
+            ui_cells_pen(c, LC_INK, sel ? LC_LABEL_BG : UI_CELLS_DEFAULT, 0);
+            ui_cells_text(c, top + row[i], x, t, w - 2 - (x - left));
+        }
+        if (row[i] >= 0 && row[i] < 64) set_item_at[row[i]] = i;
+    }
+    ui_cells_pen(c, LC_DIM, UI_CELLS_DEFAULT, 0);
+    ui_cells_fill(c, top + rule, l, 1, w - 6, '-');
+    ui_cells_pen(c, LC_ACCENT, UI_CELLS_DEFAULT, 0);
+    ui_cells_text(c, top + status, l, "Status:", 20);
+    ui_hit_add(&lc_hits, LC_HIT_SETTINGS_ROW, top, left, h - 2, w - 2);
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+}
+
 void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
 {
     int W = c->cols, H = c->rows, sw = lc_sidebar_width(m), h = H - 5;
@@ -1419,6 +1494,7 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
     if (m->help) draw_help(c, m);
     if (m->view) draw_view(c, m);
     if (m->search) draw_search(c, m, cursor_row, cursor_col);
+    if (m->settings) draw_settings(c, m);
     if (m->modal != LC_MODAL_NONE) draw_modal(c, m, cursor_row, cursor_col);
 }
 
@@ -1443,6 +1519,7 @@ int lc_hit(int row, int col, int *index)
             if (col >= menu_col[k] && col < menu_col[k] + (int)strlen(lc_menu_label[k])) *index = k;
         break;
     case LC_HIT_DROPDOWN: case LC_HIT_SIDEBAR: case LC_HIT_FMT_CAT: case LC_HIT_FMT_ITEM: case LC_HIT_SEARCH_ROW: *index = dr; break;
+    case LC_HIT_SETTINGS_ROW: *index = dr >= 0 && dr < 64 ? set_item_at[dr] : -1; break;
     case LC_HIT_CHAT: *index = dr < CHAT_ROWS_MAX ? chat_row_line[dr] : -1; break;
     case LC_HIT_STATUS: *index = col; break;
     case -1: return LC_HIT_NONE;

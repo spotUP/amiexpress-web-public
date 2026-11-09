@@ -44,6 +44,7 @@ import { amigaGaps, doorOf } from './instrumentation/amiga-gaps';
 import { XIM_DOOR_COMMAND_ADDR } from './memory-map';
 import { boardScreenAnswer } from './xim/board-screen';
 import { userNoteAnswer } from './xim/user-note';
+import { chatPrefsAnswer } from './xim/chat-prefs';
 import { menuAnswer } from './xim/menu';
 import { MouseAbsorber } from './xim/mouse-absorber';
 import { responsiveDoorGeometry } from './xim/screen-width.util';
@@ -1120,6 +1121,20 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
         } catch (err) {
           // Empty = "this board cannot take notes". Never log the request: it carries the note text.
           debugLog(`[XIMProtocol] AEW_USERNOTE failed: ${err instanceof Error ? err.message : 'error'}`);
+        }
+        this.messageParser.writeMessageString(msg.msgAddr, answer);
+        this.sendReply(msg, answer.length);
+        break;
+      }
+
+      /** AEW_CHATPREFS (11300): the caller's LiveChat prefs - xim/chat-prefs.ts. */
+      case XIMCommand.AEW_CHATPREFS: {
+        let answer = '';
+        try {
+          answer = chatPrefsAnswer(String(msg.string || ''), this.bbsSession as unknown as BBSSession);
+        } catch (err) {
+          // Empty = "this board has no prefs store". Never log the request or answer: they carry the values.
+          debugLog(`[XIMProtocol] AEW_CHATPREFS failed: ${err instanceof Error ? err.message : 'error'}`);
         }
         this.messageParser.writeMessageString(msg.msgAddr, answer);
         this.sendReply(msg, answer.length);

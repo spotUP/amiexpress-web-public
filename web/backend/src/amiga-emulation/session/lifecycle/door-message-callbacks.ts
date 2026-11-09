@@ -77,6 +77,7 @@ export const ASYNC_OUTPUT_COMMANDS: readonly number[] = [
   XIMCommand.AEW_SCREEN,
   XIMCommand.AEW_MENU,
   XIMCommand.AEW_USERNOTE,
+  XIMCommand.AEW_CHATPREFS,
 ];
 
 /** 5 s wall-clock deadline mirrors AEDoorLibrary.waitForReply. */

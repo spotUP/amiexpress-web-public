@@ -56,6 +56,8 @@ export function isIOCommand(command: number): boolean {
     XIMCommand.AEW_MENU,
     // AEW_USERNOTE looks the user up and writes the notes file - async.
     XIMCommand.AEW_USERNOTE,
+    // AEW_CHATPREFS reads and writes the prefs row - async like the commands above.
+    XIMCommand.AEW_CHATPREFS,
     // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
     // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
   ];

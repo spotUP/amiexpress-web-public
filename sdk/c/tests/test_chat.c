@@ -118,10 +118,23 @@ static int mouse_reply(char *out)
 static char note_request[256];   /* the last AEW_USERNOTE request */
 static const char *note_reply = "OK"; /* "" = the board cannot take notes */
 
+static char prefs_stored[200];   /* the AEW_CHATPREFS GET reply ("" = nothing stored) */
+static char prefs_pinned[200];   /* the GET\tpinned reply */
+static char prefs_sets[2048];    /* every SET request, one per line */
+
 static int board(void *ctx, int field, const char *request, char *out, int cap)
 {
     (void)ctx; (void)cap;
     out[0] = '\0';
+    if (field == AE_FIELD_CHATPREFS) {
+        if (strcmp(request, "GET") == 0) strcpy(out, prefs_stored);
+        else if (strcmp(request, "GET\tpinned") == 0) strcpy(out, prefs_pinned);
+        else if (strncmp(request, "SET\t", 4) == 0) {
+            if (strlen(prefs_sets) + strlen(request) + 2 < sizeof prefs_sets) { strcat(prefs_sets, request + 4); strcat(prefs_sets, "\n"); }
+            strcpy(out, "OK");
+        }
+        return (int)strlen(out);
+    }
     if (field == AE_FIELD_USERNOTE) {
         strncpy(note_request, request, sizeof note_request - 1);
         strcpy(out, note_reply);
@@ -150,7 +163,11 @@ static void start_stub(void)
     fclose(f);
 }
 
-static void stop_stub(void) { stub_chat_stop(stub_pid); remove("build/test_chat.cfg"); }
+static void stop_stub(void)
+{
+    stub_chat_stop(stub_pid); remove("build/test_chat.cfg");
+    prefs_stored[0] = prefs_pinned[0] = prefs_sets[0] = '\0';   /* the next run starts with nothing stored */
+}
 
 /* Runs the door's main with `keys` on stdin (all at once, or via a slow feeder when `slow`: 1 pauses
  * after each CR, more than 1 is a pause in microseconds after every byte). */
@@ -943,12 +960,11 @@ static void test_door_bbs_events(void)
     assert(has_event("[EVENT] ", "bob has logged off", LC_DIM));
     assert(has_event("* bob", " logged out after 2m 5s (Node 1)", LC_ACTIVITY));
     stop_stub();
-    ev_logins = 0; events_sync();
+    strcpy(prefs_stored, "showLogins=0");                  /* the stored pref turns the logins group off */
     bbs_row("bbs|1|bob|user_login|1700000500|0|");
     assert(!has_event("[EVENT] ", "bob has logged in", -1) && !has_line(0, "bob has logged in"));
     assert(has_event("* bob", " logged in from Unknown (Node 1)", LC_EV_OK));   /* formatEvent is unfiltered */
     stop_stub();
-    ev_logins = 1; events_sync();
     bbs_row("bbs|1|Guest|user_login|1700000500|0|location=x");
     assert(!has_event("* Guest", "logged in", -1) && !has_line(0, "Guest has logged in"));
     stop_stub();
@@ -1090,6 +1106,7 @@ static void test_door_c5_context_items(void)
     lobby = side_index("Lobby");
     assert(lobby >= 0 && M.side[lobby].unread == 1);
     assert(has_line(0, "Pinned Paint") && side_index("Paint") < lobby);      /* the pinned room comes first */
+    assert(strstr(prefs_sets, "pinnedChannels\tPaint\n"));                  /* TS prefsSender saves the pin */
     assert(has_line(0, "Archive requested for Paint"));
     assert(M.lines[M.nlines - 1].tone != LC_ALERT);                        /* the last line is Unblock's */
     assert(st->ignore_adds == 1 && st->ignore_removes == 1);
@@ -1136,6 +1153,47 @@ static void test_door_c6_add_note(void)
     }
     note_reply = "OK";
     printf("  [OK] door: Add Note sends NOTE alice and says saved, refused or unavailable\n");
+}
+
+/* D1 (TS settings overlay + chat:prefs): Ctrl+S and /settings open the overlay, a toggled box is saved
+ * on close, a status radio sets presence, stored prefs and pinned names load at start, /sounds and
+ * /compact persist. */
+static void test_door_d1_settings_prefs(void)
+{
+    int paint;
+    start_stub();
+    drive(KEYS("\r" "/settings\r"), 0);
+    assert(M.settings == 1 && strstr(screen_text, "Settings") && strstr(screen_text, "Show User Logins/Logouts"));
+    stop_stub();
+
+    start_stub();
+    drive(KEYS("\r" "\x13" " " "\x1b"), 0);                 /* Ctrl+S, Space on Show User Logins, Esc */
+    assert(M.settings == 0);
+    assert(strstr(prefs_sets, "showLogins\t0\n") && strstr(prefs_sets, "showTimestamps\t1\n"));
+    stop_stub();
+
+    start_stub();                                           /* Down to Away (row 9), Space sets presence */
+    drive(KEYS("\r" "\x13" "\033[B\033[B\033[B\033[B\033[B\033[B\033[B\033[B\033[B" " "), 0);
+    assert(M.settings == 1 && st->presences == 1 && M.settings_status == 1);
+    stop_stub();
+
+    start_stub();
+    st->rooms_kinds = 1;
+    strcpy(prefs_stored, "showTimestamps=0;showLogins=0");
+    strcpy(prefs_pinned, "Paint");
+    drive(KEYS("\r" "/settings\r"), 0);
+    assert(M.timestamps == 0 && M.settings_val[LC_SET_LOGINS] == 0 && M.settings_val[LC_SET_STAMPS] == 0);
+    paint = side_index("Paint");
+    assert(paint >= 0 && paint < side_index("Lobby"));      /* the stored pin lists Paint first */
+    stop_stub();
+
+    start_stub();
+    drive(KEYS("\r" "/sounds off\r" "/sounds loud\r" "/compact\r"), 0);
+    assert(has_line(0, "Sounds disabled") && has_line(0, "Error: Usage: /sounds on|off"));
+    assert(strstr(prefs_sets, "notificationSound\t0\n") && strstr(prefs_sets, "mentionSound\t0\n"));
+    assert(strstr(prefs_sets, "compactMode\t1\n"));
+    stop_stub();
+    printf("  [OK] door: settings overlay saves boxes and sets status, prefs and pins load, /sounds and /compact persist\n");
 }
 
 static void test_door_scrollbar_drag(void)
@@ -1290,6 +1348,7 @@ int main(void)
     test_door_b4_user_menu();
     test_door_c5_context_items();
     test_door_c6_add_note();
+    test_door_d1_settings_prefs();
     test_door_message_formatting();
     test_door_format_picker();
     test_door_emoji_picker();

@@ -392,6 +392,9 @@ export enum XIMCommand {
   /** This board's own: a 68K door adds a sysop note about a user - xim/user-note.ts. */
   AEW_USERNOTE = 11200,
 
+  /** This board's own: a 68K door reads and writes the caller's LiveChat prefs - xim/chat-prefs.ts. */
+  AEW_CHATPREFS = 11300,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }

@@ -143,6 +143,13 @@ typedef struct {
     char search_user[32];
     int search_n, search_sel, search_top;   /* the Results list: rows held, selected row, first row shown */
     char search_rows[LC_SEARCH_MAX][LC_VIEW_COL];
+    /* The settings overlay (TS overlays/settings-overlay.ts): LC_SET_ITEMS rows in TS order, the
+       five BBS events, Mute Sounds, Show Typing Indicators, Show Timestamps, the four Status radio
+       items, then Close. settings_val holds the eight checkboxes, settings_status the radio. */
+    int settings;
+    int settings_sel;              /* LC_SET_* row that has the keys */
+    int settings_val[8];
+    int settings_status;           /* 0 online, 1 away, 2 busy, 3 dnd */
     ui_popup ctx;                  /* the right-click menu (TS features/context-menus.ts) */
     int ctx_kind;                  /* LC_CTX_* */
     int ctx_target;                /* side index (user, channel) or line index (chat) */
@@ -196,7 +203,18 @@ enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL, LC_CTX_REACT, LC_C
 enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, LC_HIT_INPUT,
        LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL, LC_HIT_SCROLLBAR,
        LC_HIT_FMT, LC_HIT_FMT_CAT, LC_HIT_FMT_ITEM, LC_HIT_FMT_CLOSE,
-       LC_HIT_SEARCH, LC_HIT_SEARCH_Q, LC_HIT_SEARCH_USER, LC_HIT_SEARCH_ROW };
+       LC_HIT_SEARCH, LC_HIT_SEARCH_Q, LC_HIT_SEARCH_USER, LC_HIT_SEARCH_ROW,
+       LC_HIT_SETTINGS, LC_HIT_SETTINGS_ROW };   /* SETTINGS_ROW index: the LC_SET_* row, -1 a gap */
+
+/* ---- the settings overlay rows (TS settings-checkboxes-events/-prefs, settings-status-radio) ---- */
+enum { LC_SET_LOGINS, LC_SET_FILES, LC_SET_DOORS, LC_SET_MESSAGES, LC_SET_ANNOUNCE,
+       LC_SET_MUTE, LC_SET_TYPING, LC_SET_STAMPS,
+       LC_SET_ONLINE, LC_SET_AWAY, LC_SET_BUSY, LC_SET_DND, LC_SET_CLOSE, LC_SET_ITEMS };
+/** The row's text as TS writes it: "Show User Logins/Logouts", "Online", "Close". */
+const char *lc_settings_label(int item);
+/** Box size as TS: w = min(72, max(20, cols-4)), h = min(22, max(18, rows-4)), then held inside the
+ *  screen. Fills row[LC_SET_ITEMS] plus the "BBS Events:", rule and "Status:" rows (interior offsets). */
+void lc_settings_layout(int cols, int rows, int *h, int *w, int row[LC_SET_ITEMS], int *head, int *rule, int *status);
 
 #define LC_SCROLL_TRACK 66
 #define LC_SCROLL_THUMB 195
