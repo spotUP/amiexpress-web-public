@@ -478,6 +478,7 @@ static void open_help(void)
 static void present(void)
 {
     int cr = 0, cc = 0;
+    if (M.ntyping > 0) hhmm_now(M.typing_time);
     int caret = M.focus == LC_FOCUS_INPUT && !M.help && !M.view && M.menu < 0 && !M.settings
                 && (M.modal == LC_MODAL_NONE || M.modal == LC_MODAL_PROMPT);
     lc_draw(&cells, &M, &cr, &cc);
@@ -827,6 +828,97 @@ static void take_bbs_event(const char *at, const char *node, const char *user, c
     }
 }
 
+/* ---- D3 typing indicators (TS chat:keystroke / chat:typing over the hub) ----
+   Sender: the whole input buffer goes to POST /rooms/:id/typing, throttled with a leading and a
+   trailing edge (TS 400 ms); "" (submit, clear, room switch, exit) always goes at once.
+   Receiver: a typing event sets the typer's row, "" drops it, 5 s with no update drops it (TS
+   TYPING_STALE_MS). The caller's own buffer is a local echo row, as the TS door draws it. */
+static int show_typing = 1;                      /* TS showTypingIndicators: never stored by the TS door either */
+#define TYPING_THROTTLE_TICKS 20                 /* 400 ms at 50 ticks/s */
+#define TYPING_STALE_TICKS 250                   /* 5000 ms */
+#define TYPING_BLINK_TICKS 26                    /* 530 ms */
+static char typing_sent[LC_INPUT_MAX];           /* the last buffer the hub has */
+static char typing_room[48];                     /* the room it was sent to */
+static char typing_seen[LC_INPUT_MAX];           /* the input as typing_sync last saw it */
+static int typing_wait, typing_pending, typing_blink_t;
+static int typing_age[LC_TYPING_MAX];
+
+static void typing_set(const char *nick, const char *text)
+{
+    int i, j;
+    for (i = 0; i < M.ntyping; i++) if (strcmp(M.typing[i].nick, nick) == 0) break;
+    if (text[0] == '\0') {
+        if (i == M.ntyping) return;
+        for (j = i; j + 1 < M.ntyping; j++) { M.typing[j] = M.typing[j + 1]; typing_age[j] = typing_age[j + 1]; }
+        M.ntyping--;
+        return;
+    }
+    if (i == M.ntyping) {
+        if (M.ntyping == LC_TYPING_MAX) return;   /* full: the newest typer waits for a free row */
+        M.ntyping++;
+        copy(M.typing[i].nick, sizeof M.typing[i].nick, nick);
+    }
+    clean(M.typing[i].text, sizeof M.typing[i].text, text);
+    typing_age[i] = 0;
+}
+
+static void typing_send(const char *text)
+{
+    ae_chat_typing(&chat, room_id, text);
+    copy(typing_sent, sizeof typing_sent, text);
+    copy(typing_room, sizeof typing_room, room_id);
+    typing_wait = TYPING_THROTTLE_TICKS;
+    typing_pending = 0;
+}
+
+/** After each key: the input changed, so update the own row and send (leading edge) or hold (trailing). */
+static void typing_sync(void)
+{
+    if (strcmp(M.input, typing_seen) == 0) return;
+    copy(typing_seen, sizeof typing_seen, M.input);
+    if (show_typing) typing_set(handle, M.input);
+    if (dm_thread[0] != '\0' || room_id[0] == '\0') return;
+    if (strcmp(M.input, typing_sent) == 0) { typing_pending = 0; return; }
+    if (M.input[0] == '\0' || typing_wait <= 0) typing_send(M.input);
+    else typing_pending = 1;
+}
+
+/** The idle clock: trailing edge, stale rows, cursor blink. 1 = the frame changed. */
+static int typing_tick(int ticks)
+{
+    int i, changed = 0;
+    if (typing_wait > 0) typing_wait -= ticks;
+    if (typing_pending && typing_wait <= 0 && dm_thread[0] == '\0' && room_id[0] != '\0') typing_send(M.input);
+    for (i = 0; i < M.ntyping; ) {
+        if (strcmp(M.typing[i].nick, handle) != 0 && (typing_age[i] += ticks) >= TYPING_STALE_TICKS) {
+            typing_set(M.typing[i].nick, "");
+            changed = 1;
+        } else i++;
+    }
+    if (M.ntyping > 0 && (typing_blink_t += ticks) >= TYPING_BLINK_TICKS) {
+        typing_blink_t = 0;
+        M.typing_blink = !M.typing_blink;
+        changed = 1;
+    }
+    return changed;
+}
+
+/** Exit: the hub hears "stopped" if it still holds a buffer. */
+static void typing_stop(void)
+{
+    if (typing_sent[0] != '\0' && typing_room[0] != '\0') ae_chat_typing(&chat, typing_room, "");
+}
+
+/** Room switch: stopped, and the rows belong to the old room. */
+static void typing_reset(void)
+{
+    typing_stop();
+    typing_sent[0] = '\0';
+    typing_seen[0] = '\0';
+    typing_pending = 0;
+    M.ntyping = 0;
+}
+
 static void take_events(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
@@ -882,6 +974,8 @@ static void take_events(void)
             if (room_motd[0] != '\0') sprintf(line, "[MOTD] %.200s", room_motd);
             else strcpy(line, "[MOTD] cleared");
             motd_line(line);
+        } else if (strcmp(type, "typing") == 0 && in_room) {
+            if (strcmp(user, handle) != 0 && show_typing) typing_set(user, f[7]);   /* own events: the local echo has them */
         } else if (strcmp(type, "mode") == 0 && in_room && f[7][0] != '\0') {
             /* TS room:mode: {accentAlt}[by] set mode <applied>{/accentAlt} */
             sprintf(line, "[%.24s] set mode %.160s", user[0] != '\0' ? user : "?", f[7]);
@@ -989,7 +1083,7 @@ static int join_room(const char *id)
     copy(old, sizeof old, room_id);
     rc = ae_chat_join(&chat, id, name, sizeof name, topic, sizeof topic, motd, sizeof motd, &members);
     if (rc != AE_CHAT_OK) { show_error(rc); return rc; }
-    if (old[0] != '\0' && strcmp(old, id) != 0) ae_chat_leave(&chat, old);
+    if (old[0] != '\0' && strcmp(old, id) != 0) { typing_reset(); ae_chat_leave(&chat, old); }
     clean(room_id, sizeof room_id, id);
     clean(room_name, sizeof room_name, name);
     clean(room_topic, sizeof room_topic, topic);
@@ -1700,7 +1794,6 @@ static void events_typed(const char *rest)
 
 static int is_enter(int key);
 static int snd_on = 1;                           /* TS notificationSound/mentionSound (= !muteSounds) */
-static int show_typing = 1;                      /* TS showTypingIndicators: never stored by the TS door either */
 
 static void pref_set_bool(const char *key, int v) { ae_chat_prefs_set(key, v ? "1" : "0"); }
 
@@ -1814,6 +1907,7 @@ static void settings_close(void)
     ev_announce = M.settings_val[LC_SET_ANNOUNCE];
     snd_on = !M.settings_val[LC_SET_MUTE];
     show_typing = M.settings_val[LC_SET_TYPING];
+    if (!show_typing) M.ntyping = 0;
     M.timestamps = M.settings_val[LC_SET_STAMPS];
     events_sync();
     prefs_save();
@@ -2480,6 +2574,7 @@ static void door_idle(void *ctx)
     polled = idle_step();
     if (polled) do_poll();
     opened = fmt_tick(IDLE_SLEEP_TICKS);
+    if (typing_tick(IDLE_SLEEP_TICKS)) opened = 1;
     if (polled || opened) present();
 }
 
@@ -3091,6 +3186,7 @@ int main(int argc, char **argv)
     idle_ticks = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
     room_id[0] = '\0'; room_name[0] = '\0'; room_topic[0] = '\0'; dm_thread[0] = '\0'; dm_peer[0] = '\0';
     nignored = 0; nmuted = 0; nblocked = 0;
+    typing_sent[0] = typing_room[0] = typing_seen[0] = '\0'; typing_wait = typing_pending = typing_blink_t = 0;
     snd_on = 1; show_typing = 1; ev_logins = ev_files = ev_doors = ev_messages = ev_announce = 1; ev_mute_all = 0;
     pinned_rooms.n = expanded_rooms.n = collapsed_rooms.n = unread_rooms.n = 0;
     fmt_wait = 0; fmt_seen_a = fmt_seen_b = -1;
@@ -3184,10 +3280,11 @@ int main(int argc, char **argv)
            board's any-motion mouse mode sends a wake byte on every hover move, and a reset per key
            kept the event poll from ever running while the mouse moved (sysop test 2026-11-08). */
         ended = handle_key(key);
-        if (!ended) present();
+        if (!ended) { typing_sync(); present(); }
     }
 
     ae_bs_mouse(0);
+    typing_stop();
     if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
     ae_chat_close(&chat);
     finish();

@@ -537,6 +537,13 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         st->room_motd_puts++;
         sprintf(st->pending_row, "room_motd|lobby|Tester||1700000500|0|%s", st->room_motd);
         chat_reply(fd, 200, "application/json", "{\"ok\":true}");
+    } else if (is_post && strncmp(path, "/chat/v1/rooms/", 15) == 0 && strstr(path, "/typing") != 0) {
+        /* POST /rooms/:id/typing (D3): logged, not noted, so a typed command keeps last_write_path */
+        char text[220];
+        chat_copy_json_field(text, sizeof text, body, "text");
+        st->typing_calls++;
+        if (strlen(st->typing_log) + strlen(text) + 2 < sizeof st->typing_log) { strcat(st->typing_log, text); strcat(st->typing_log, "|"); }
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
     } else if (is_post && strncmp(path, "/chat/v1/rooms/", 15) == 0 && strstr(path, "/mode") != 0) {
         /* POST /rooms/:id/mode: "+z" is refused (a non-moderator); an 'x' flag is unknown; the rest apply */
         char modes[72], params[160], applied[260], reply[400];

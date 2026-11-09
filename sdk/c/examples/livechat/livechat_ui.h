@@ -101,6 +101,9 @@ enum { LC_FOCUS_INPUT, LC_FOCUS_SIDEBAR, LC_FOCUS_MENU };
 enum { LC_MODAL_NONE, LC_MODAL_MESSAGE, LC_MODAL_QUIT, LC_MODAL_PROMPT };
 
 #define LC_INPUT_MAX 256
+/* TS typingBuffers: one live preview row per typer (D3). The hub caps the text at 200 bytes. */
+#define LC_TYPING_MAX 4
+typedef struct { char nick[24]; char text[204]; } lc_typing;
 typedef struct {
     int cols, rows;
     char handle[32];
@@ -165,6 +168,11 @@ typedef struct {
     int fmt_a, fmt_b;
     int fmt_kind;                  /* LC_PICK_*: the same CategoryPicker serves the format and the emoji picker */
     const unsigned long *rgb;      /* the caller's theme tokens, 0xRRGGBB in ui_token order (the picker's colours) */
+    /* TS rebuildChatContent typing rows: "[time] <nick> buffer" plus a blinking cursor, under the log */
+    lc_typing typing[LC_TYPING_MAX];
+    int ntyping;
+    char typing_time[6];           /* the paint time: TS stamps the preview with now */
+    int typing_blink;              /* the cursor cell is on (TS 530 ms blink) */
 } lc_model;
 
 /* ---- the format picker ---- */

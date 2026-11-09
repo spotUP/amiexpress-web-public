@@ -935,6 +935,50 @@ static void test_door_b4_presence(void)
 }
 
 /* A8: a hub board_joined row (no room) prints one system line, the same text web chat shows. */
+/* D3 typing indicators. Send: the input buffer goes to POST /rooms/:id/typing (leading edge at
+ * once, the rest throttled) and submit always sends the final "". Receive: a typing row sets the
+ * typer's preview, "" drops it, the caller's own hub echo is ignored (the local echo has it). */
+static int typing_row(const char *nick, const char *text)
+{
+    int i;
+    for (i = 0; i < M.ntyping; i++)
+        if (strcmp(M.typing[i].nick, nick) == 0) return text == 0 || strcmp(M.typing[i].text, text) == 0;
+    return 0;
+}
+
+static void test_door_typing(void)
+{
+    size_t n;
+    start_stub();
+    drive(KEYS("\r" "hi\r" "/q\r"), 1);
+    n = strlen(st->typing_log);
+    assert(strncmp(st->typing_log, "h|", 2) == 0);                    /* leading edge: the first key goes at once */
+    assert(n >= 3 && strcmp(st->typing_log + n - 2, "||") == 0);      /* the last send is the "" of a submit */
+    stop_stub();
+
+    start_stub();                                                      /* another user's buffer becomes a preview row */
+    strcpy(st->pending_row, "typing|lobby|Alice||1700000500|0|hel");
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;
+    drive(KEYS("\r" "/q\r"), 1);
+    assert(typing_row("Alice", "hel") && typing_row("Tester", "/quit "));   /* own row: local echo of the input */
+    assert(strstr(screen_text, "Alice") != 0 && strstr(screen_text, "> hel") != 0);   /* painted under the log */
+    stop_stub();
+
+    start_stub();                                                      /* "" drops the row */
+    strcpy(st->pending_row, "typing|lobby|Alice||1700000500|0|");
+    drive(KEYS("\r" "/q\r"), 1);
+    assert(!typing_row("Alice", 0));
+    stop_stub();
+
+    start_stub();                                                      /* the caller's own hub echo is ignored */
+    strcpy(st->pending_row, "typing|lobby|Tester||1700000500|0|ghost");
+    drive(KEYS("\r" "/q\r"), 1);
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    assert(!typing_row("Tester", "ghost"));
+    stop_stub();
+    printf("  [OK] door: typing sends throttled buffers and a final \"\", typing events set and clear preview rows\n");
+}
+
 static void test_door_board_joined(void)
 {
     start_stub();
@@ -1361,6 +1405,7 @@ int main(void)
     test_door_delete_and_kicked();
     test_door_b4_presence();
     test_door_board_joined();
+    test_door_typing();
     test_door_bbs_events();
     test_door_b4_marks();
     test_door_b4_ignore();

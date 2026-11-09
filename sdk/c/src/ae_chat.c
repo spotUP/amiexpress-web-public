@@ -706,6 +706,20 @@ int ae_chat_room_motd(ae_chat *c, const char *room, const char *motd)
     return call(c, "PUT", path, body, (unsigned long)at);
 }
 
+int ae_chat_typing(ae_chat *c, const char *room, const char *text)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    long at;
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/typing");
+
+    if (rc != AE_CHAT_OK) return rc;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "text", text ? text : "");
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "POST", path, body, (unsigned long)at);
+}
+
 int ae_chat_mode(ae_chat *c, const char *room, const char *modes, const char *params,
                  char *applied, int applied_cap, char *errors, int errors_cap)
 {

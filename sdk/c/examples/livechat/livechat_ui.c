@@ -701,6 +701,22 @@ static void tint_row(ui_cells *c, int row, int left, int width)
     }
 }
 
+/* TS rebuildChatContent preview: {dim}[time]{/dim} <{color}nick{/color}> buffer, then the cursor:
+   an inverse space in the typer's colour while the blink is on, else a space. */
+static void typing_marked(const lc_model *m, int i, char *out, int cap)
+{
+    sb b;
+    const lc_typing *t = &m->typing[i];
+    int color = lc_nick_color(t->nick);
+    b.p = out; b.n = 0; b.cap = cap;
+    out[0] = '\0';
+    sb_fg(&b, LC_DIM); sb_ch(&b, '['); sb_str(&b, m->typing_time); sb_ch(&b, ']'); sb_ch(&b, UI_CELLS_M_BASE);
+    sb_str(&b, " <"); sb_fg(&b, color); sb_str(&b, t->nick); sb_ch(&b, UI_CELLS_M_BASE);
+    sb_str(&b, "> "); sb_str(&b, t->text);
+    if (m->typing_blink) { sb_fg(&b, color); sb_ch(&b, UI_CELLS_M_ATTR); sb_ch(&b, UI_CELLS_ATTR(UI_CELLS_A_REVERSE)); sb_ch(&b, ' '); sb_ch(&b, UI_CELLS_M_BASE); }
+    else sb_ch(&b, ' ');
+}
+
 #define CHAT_ROWS_MAX 128
 static ui_hit lc_hits;                              /* the last frame's click regions, topmost last */
 static int chat_row_line[CHAT_ROWS_MAX];            /* chat body row -> line index, -1 empty */
@@ -748,6 +764,10 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
         if (i == picked) pick_at = total;
         total += line_rows[i];
     }
+    for (i = 0; i < m->ntyping; i++) {             /* the typing rows follow the log (few, so always rewrapped) */
+        typing_marked(m, i, marked, (int)sizeof marked);
+        total += ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
+    }
     if (picked >= 0) first = pick_at + line_rows[picked] / 2 - rows / 2;   /* the picker centres its selection */
     else first = total - m->scroll - rows;          /* the newest rows, filled from the top */
     if (first > total - rows) first = total - rows;
@@ -765,6 +785,17 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
             ui_cells_fill(c, body + r, left + 1 + cols, 1, w - 2 - cols, ' ');   /* the rest of the row: text rows are not pre-cleared */
             used = r + 1;
             if (i == picked) tint_row(c, body + r, left + 1, width);
+        }
+    }
+    for (i = 0; i < m->ntyping && at < first + rows; i++) {   /* preview rows: chat_row_line stays -1 */
+        typing_marked(m, i, marked, (int)sizeof marked);
+        n = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
+        for (k = 0; k < n; k++, at++) {
+            int r = at - first, cols;
+            if (at < first || at >= first + rows) continue;
+            cols = ui_cells_marked(c, body + r, left + 1, marked, starts[k], ends[k], width);
+            ui_cells_fill(c, body + r, left + 1 + cols, 1, w - 2 - cols, ' ');
+            used = r + 1;
         }
     }
     ui_cells_fill(c, body + used, left + 1, rows - used, w - 2, ' ');   /* rows with no line */

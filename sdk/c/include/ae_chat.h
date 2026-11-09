@@ -159,6 +159,11 @@ int ae_chat_topic(ae_chat *c, const char *room, const char *topic);
 /** PUT /rooms/:id/motd {motd}: the room's message of the day (TS /motd). An empty motd clears it. Owner or moderator only. */
 int ae_chat_room_motd(ae_chat *c, const char *room, const char *motd);
 
+/** POST /rooms/:id/typing {text} (TS live typing preview): the caller's whole input line, so other
+ * members see it as it is typed. An empty text means the caller stopped (sent or cleared the line).
+ * The hub emits it as a "typing" event; callers throttle. */
+int ae_chat_typing(ae_chat *c, const char *room, const char *text);
+
 /** POST /rooms/:id/mode {modes, params} (TS /mode): staff apply a mode string such as "+mv" with
  * space-separated params. `applied` gets what took effect ("+m +v bob@BOARD"), `errors` the
  * per-flag refusals joined by '|'. Either may be NULL. */
