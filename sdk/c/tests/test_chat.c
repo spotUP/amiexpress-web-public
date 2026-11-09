@@ -1064,6 +1064,16 @@ static void test_door_dm_and_group_dm(void)
     assert(dm_note("[DM to bob]: hi", LC_DM_SENT) && dm_note("[Group DM to bob, carol@UPROUGH]: hey", LC_DM_SENT));
     stop_stub();
 
+    start_stub();                                                      /* the hub echoes the sender's own DM as handle@BOARD */
+    strcpy(st->session_user, "Tester@AMIX");
+    strcpy(st->pending_row, "dm|dm0123456789ab|Tester@AMIX|d6|1700000500|0|hi");
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;
+    drive(KEYS("\r" "/q\r"), 1);
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    assert(st->events >= 1);
+    assert(!dm_note("[DM from Tester@AMIX]: hi", LC_DM_RECEIVED) && !activity_has("DM from Tester@AMIX"));
+    stop_stub();
+
     start_stub();                                                      /* a refusal shows the hub's reason */
     strcpy(st->group_dm_reject, "Group DM needs 3+ unique participants (use /msg for 1:1)");
     drive(KEYS("\r" "/msg @bob @bob hey\r"), 0);

@@ -75,6 +75,7 @@ static lc_model M;
 
 static ae_chat chat;
 static char handle[32];
+static int is_self(const char *user);
 
 /* The door sleeps IDLE_SLEEP_TICKS (1/50 s) per idle call, so a key waits at most that long before
    the key loop sees it. It used to sleep 25 ticks (half a second) and every key paid for it. The
@@ -212,7 +213,7 @@ static lc_line *own_last(void)
     int i;
     for (i = M.nlines - 1; i >= 0; i--) {
         lc_line *l = &M.lines[i];
-        if (l->number > 0 && l->id[0] != '\0' && strcmp(l->nick, handle) == 0) return l;
+        if (l->number > 0 && l->id[0] != '\0' && is_self(l->nick)) return l;
     }
     return 0;
 }
@@ -287,6 +288,14 @@ static int same_nick(const char *a, const char *b)
         if (x != y) return 0;
     }
     return *a == *b;
+}
+
+/** The caller, as hub rows name it ("handle@BOARD", chat.user) or as the door's local echo
+ *  names it (bare handle). Hub rows never carry a bare name, so the second test only
+ *  matches the local echo. */
+static int is_self(const char *user)
+{
+    return (chat.user[0] != '\0' && same_nick(user, chat.user)) || same_nick(user, handle);
 }
 
 static int hide_find(char list[][32], int n, const char *nick)
@@ -904,7 +913,7 @@ static int typing_tick(int ticks)
     if (typing_wait > 0) typing_wait -= ticks;
     if (typing_pending && typing_wait <= 0 && dm_thread[0] == '\0' && room_id[0] != '\0') typing_send(M.input);
     for (i = 0; i < M.ntyping; ) {
-        if (strcmp(M.typing[i].nick, handle) != 0 && (typing_age[i] += ticks) >= TYPING_STALE_TICKS) {
+        if (!is_self(M.typing[i].nick) && (typing_age[i] += ticks) >= TYPING_STALE_TICKS) {
             typing_set(M.typing[i].nick, "");
             changed = 1;
         } else i++;
@@ -950,7 +959,7 @@ static void take_events(void)
             /* the hub's label column is the bare thread id: "dm<hex>" 1:1, "dg<hex>" group */
             if (dm_thread[0] != '\0' && strcmp(room, dm_thread) == 0) {
                 add_message(LC_LIVE, seq, ref, user, f[5], f[7], "");
-            } else if (strcmp(user, handle) != 0 && !hidden_nick(user)) {
+            } else if (!is_self(user) && !hidden_nick(user)) {
                 /* TS chat:dm received: the DM line, then the activity line (group threads are "dg...") */
                 int group = strncmp(room, "dg", 2) == 0;
                 dm_line(0, group, user, f[7]);
@@ -971,7 +980,7 @@ static void take_events(void)
             system_line(line);
             sprintf(line, "%.24s %s", user, joined ? "joined" : "left");
             add_note(LC_ACTIVITY_LINE, line);
-            if (strcmp(user, handle) != 0) side_user(user, joined);
+            if (!is_self(user)) side_user(user, joined);
         } else if (strcmp(type, "presence") == 0) {
             side_presence(user, f[7]);          /* TS chat:presence: the dot and the text change in the user list */
         } else if (strcmp(type, "edit") == 0) {
@@ -991,7 +1000,7 @@ static void take_events(void)
             else strcpy(line, "[MOTD] cleared");
             motd_line(line);
         } else if (strcmp(type, "typing") == 0 && in_room) {
-            if (strcmp(user, handle) != 0 && show_typing) typing_set(user, f[7]);   /* own events: the local echo has them */
+            if (!is_self(user) && show_typing) typing_set(user, f[7]);   /* own events: the local echo has them */
         } else if (strcmp(type, "mode") == 0 && in_room && f[7][0] != '\0') {
             /* TS room:mode: {accentAlt}[by] set mode <applied>{/accentAlt} */
             sprintf(line, "[%.24s] set mode %.160s", user[0] != '\0' ? user : "?", f[7]);
@@ -999,14 +1008,14 @@ static void take_events(void)
         } else if ((strcmp(type, "op") == 0 || strcmp(type, "deop") == 0) && in_room) {
             sprintf(line, "%.24s is %s a room operator", user[0] != '\0' ? user : "Someone", type[0] == 'd' ? "no longer" : "now");
             system_line(line);
-        } else if ((strcmp(type, "kicked") == 0 || strcmp(type, "banned") == 0) && strcmp(user, handle) == 0 && in_room) {
+        } else if ((strcmp(type, "kicked") == 0 || strcmp(type, "banned") == 0) && is_self(user) && in_room) {
             /* TS chat:kicked / chat:banned reach only the target; the server's kick is per room, so leave the room */
             sprintf(line, "You have been %s%s%.120s", type[0] == 'k' ? "kicked" : "banned", f[7][0] != '\0' ? ": " : "", f[7]);
             system_line(line);
             system_line("Disconnecting...");
             room_id[0] = '\0';
             M.room[0] = '\0';
-        } else if (strcmp(type, "muted") == 0 && strcmp(user, handle) == 0 && in_room) {
+        } else if (strcmp(type, "muted") == 0 && is_self(user) && in_room) {
             system_line("You have been muted");
         } else if (strcmp(type, "bbs") == 0) {
             take_bbs_event(f[5], room, user, ref, f[7]);
@@ -1994,7 +2003,7 @@ static int own_status(void)
 {
     int i;
     for (i = 0; i < M.nside; i++)
-        if (M.side[i].kind == LC_SIDE_USER && strcmp(M.side[i].label, M.handle) == 0)
+        if (M.side[i].kind == LC_SIDE_USER && is_self(M.side[i].label))
             return M.side[i].status == 'a' ? 1 : M.side[i].status == 'b' ? 2 : M.side[i].status == 'd' ? 3 : 0;
     return 0;
 }
@@ -3054,7 +3063,7 @@ static int handle_mouse(void)
         if (hit == LC_HIT_SIDEBAR && side_selectable(idx)) {
             lc_side *s = &M.side[idx];
             M.side_sel = idx;
-            if (s->kind == LC_SIDE_USER && strcmp(s->label, M.handle) != 0) ctx_open(LC_CTX_USER, idx, row, col);
+            if (s->kind == LC_SIDE_USER && !is_self(s->label)) ctx_open(LC_CTX_USER, idx, row, col);
             else if (s->kind == LC_SIDE_ROOM) ctx_open(LC_CTX_CHANNEL, idx, row, col);
             else if (e->button == AE_MOUSE_LEFT) side_pick();
         }
