@@ -341,6 +341,20 @@ export class DoorExitDetector {
    */
   async handleExecutionError(error: unknown): Promise<void> {
     const { emulator, socket, config, executionState } = this.deps;
+    // A trap handler can terminate the door (destroying the CPU) and then
+    // throw; every register read below would throw "Emulator not initialized"
+    // and hide the real error. Log the real error first, skip the dump.
+    if (!emulator.isInitialized()) {
+      console.error(
+        "[DoorLifecycleManager] ERROR in execution loop (emulator already destroyed, no crash dump):",
+        error,
+      );
+      socket.emit("door:error", {
+        message: error instanceof Error ? error.message : "Execution error",
+      });
+      this.deps.terminate();
+      return;
+    }
     const pc = emulator.getRegister(16);
     const sp = emulator.getRegister(15);
     const doorName = path.basename(config.executablePath);
