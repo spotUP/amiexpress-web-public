@@ -94,6 +94,7 @@ typedef struct {
     char sent_id[48];          /* the server's id for it, from the send reply ("" until it answers) */
     int status;                /* HTTP status of the last call */
     char error[32];            /* the server's error code on a non-2xx */
+    char detail[160];          /* the server's reason text on a non-2xx ("" when none) */
     int retry_after;           /* seconds, when the server sent retryAfter */
     int http_error;            /* ae_http error of the last AE_CHAT_ERR_TRANSPORT */
     int calls;                 /* requests sent, reopens included */

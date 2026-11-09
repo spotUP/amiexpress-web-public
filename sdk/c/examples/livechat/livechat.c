@@ -450,6 +450,7 @@ static void show_error(int rc)
     else if (strcmp(chat.error, "rate_limited") == 0) t = "Slow down a moment.";
     else if (strcmp(chat.error, "forbidden") == 0) t = "Not allowed.";
     else if (strcmp(chat.error, "conflict") == 0) t = "Already sent.";
+    else if (chat.detail[0] != '\0') t = chat.detail;    /* the hub's own reason (bad_request and the rest) */
     else t = "The chat server refused that.";
     message_modal("Error", t);
 }
@@ -2506,12 +2507,13 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "msg", "dm") || strcmp(cmd, "pm") == 0 || strcmp(cmd, "d") == 0) {
         /* TS msgCmd: every leading word that starts with '@' is a target; one target is a DM,
            two or more a group DM (chat:dm / chat:group-dm). */
-        char targets[10][48], list[200], tid[32];
+        char targets[10][48], users[10][72], word[48], list[200], tid[32];
         const char *peers[10];
         int n = 0, i;
         while (*rest == '@' && n < 10) {
-            arg_word(rest + 1, targets[n], sizeof targets[0]);
-            peers[n] = targets[n];
+            arg_word(rest, word, sizeof word);        /* the hub names users handle@BOARD (TS bridge chat:dm) */
+            target_user(word, users[n], sizeof users[0], targets[n], sizeof targets[0]);
+            peers[n] = users[n];
             rest = after_word(rest);
             n++;
         }

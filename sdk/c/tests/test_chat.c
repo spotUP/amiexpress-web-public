@@ -1055,6 +1055,20 @@ static void test_door_dm_and_group_dm(void)
     poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
     assert(dm_note("[Group DM from alice]: hey all", LC_DM_RECEIVED) && activity_has("Group DM from alice"));
     stop_stub();
+
+    start_stub();                                                      /* the hub names users handle@BOARD */
+    strcpy(st->session_user, "Tester@AMIX");
+    drive(KEYS("\r" "/msg @bob hi\r" "/msg @bob @carol@UPROUGH hey\r" "/q\r"), 1);
+    assert(strcmp(st->last_dm_peer, "bob%40AMIX") == 0);           /* path-encoded; the hub decodes */
+    assert(strstr(st->last_group_body, "\"participants\":[\"bob@AMIX\",\"carol@UPROUGH\"]") != 0);
+    assert(dm_note("[DM to bob]: hi", LC_DM_SENT) && dm_note("[Group DM to bob, carol@UPROUGH]: hey", LC_DM_SENT));
+    stop_stub();
+
+    start_stub();                                                      /* a refusal shows the hub's reason */
+    strcpy(st->group_dm_reject, "Group DM needs 3+ unique participants (use /msg for 1:1)");
+    drive(KEYS("\r" "/msg @bob @bob hey\r"), 0);
+    assert(M.modal == LC_MODAL_MESSAGE && strcmp(M.modal_text, "Group DM needs 3+ unique participants (use /msg for 1:1)") == 0);
+    stop_stub();
     printf("  [OK] door: /msg @a and /msg @a @b send DM and group DM, DM lines render as the TS door's\n");
 }
 

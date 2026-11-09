@@ -479,7 +479,10 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
 
     if (is_post && strcmp(path, "/chat/v1/sessions") == 0) {
         st->sessions++;
-        chat_reply(fd, 200, "application/json", "{\"sid\":\"sid0123456789\",\"user\":\"Tester\",\"expiresIn\":90}");
+        char reply[160];
+        sprintf(reply, "{\"sid\":\"sid0123456789\",\"user\":\"%.48s\",\"expiresIn\":90}",
+                st->session_user[0] != '\0' ? st->session_user : "Tester");
+        chat_reply(fd, 200, "application/json", reply);
     } else if (st->expire_next && !(is_post && strncmp(path, "/chat/v1/sessions", 17) == 0)) {
         st->expire_next = 0;
         chat_reply(fd, 401, "application/json", "{\"error\":\"session_expired\",\"detail\":\"gone\"}");
@@ -703,7 +706,11 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (is_post && strcmp(path, "/chat/v1/dm-group") == 0) {
         st->group_dms++;
         strncpy(st->last_group_body, body, sizeof st->last_group_body - 1);
-        chat_reply(fd, 201, "application/json", "{\"id\":\"g1\",\"seq\":4,\"threadId\":\"dgabc123def456\"}");
+        if (st->group_dm_reject[0] != '\0') {
+            char reply[220];
+            sprintf(reply, "{\"error\":\"bad_request\",\"detail\":\"%.160s\"}", st->group_dm_reject);
+            chat_reply(fd, 400, "application/json", reply);
+        } else chat_reply(fd, 201, "application/json", "{\"id\":\"g1\",\"seq\":4,\"threadId\":\"dgabc123def456\"}");
     } else if (is_post && strncmp(path, "/chat/v1/dm/", 12) == 0) {
         st->dms++;
         strncpy(st->last_dm_peer, path + 12, sizeof st->last_dm_peer - 1);

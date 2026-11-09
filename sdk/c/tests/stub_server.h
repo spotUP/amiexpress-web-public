@@ -113,6 +113,8 @@ typedef struct {
     char last_dm_peer[64];
     char last_dm_text[512];
     int group_dms;                         /* POST /chat/v1/dm-group */
+    char session_user[48];                 /* test sets: the session's user name ("" = Tester) */
+    char group_dm_reject[160];             /* test sets: POST /dm-group answers 400 bad_request with this detail */
     char last_group_body[1024];            /* its raw JSON body */
     char last_created[64];
     char last_created_kind[16];            /* "kind" of the latest POST /rooms, "" when it sent none */

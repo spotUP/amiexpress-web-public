@@ -251,6 +251,7 @@ static int call_once(ae_chat *c, const char *method, const char *path,
     c->cursor = 0;
     c->status = 0;
     c->error[0] = '\0';
+    c->detail[0] = '\0';
     c->retry_after = 0;
     c->http_error = 0;
 
@@ -284,6 +285,7 @@ static int call_once(ae_chat *c, const char *method, const char *path,
     if (response.status < 200 || response.status > 299) {
         int retry = 0;
         json_extract_string(c->reply, "error", c->error, sizeof c->error);
+        json_extract_string(c->reply, "detail", c->detail, sizeof c->detail);
         if (json_extract_bool(c->reply, "retryAfter", &retry) == 0) c->retry_after = retry;
         return AE_CHAT_ERR_STATUS;
     }
