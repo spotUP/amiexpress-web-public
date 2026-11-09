@@ -472,6 +472,198 @@ static void draw_input(ui_cells *c, const lc_model *m, int *cr, int *cc)
     if (iw < W) ui_cells_button(c, row, iw, 6, ":D", LC_GREY, LC_ACTIVITY);
 }
 
+/* The one command list: /help <command> and the "/" menu both read it. TS /help <command>: name, aliases, description, usage - the registered text of the commands this door runs. */
+const char *const lc_cmd_help[][4] = {
+    {"ban", "", "Ban user from channel", "/ban @user [reason]"},
+    {"clear", "cls", "Clear chat display", "/clear"},
+    {"create", "", "Create a new channel. --private and --invite-only make it members-only.", "/create #name [topic] [--private] [--invite-only] [--motd \"text\"]"},
+    {"deletemsg", "delmsg", "Delete a message (your last by default)", "/deletemsg [msg-id]"},
+    {"edit", "", "Edit one of your messages (your last by default)", "/edit [msg-id] new text"},
+    {"away", "afk", "Set away status", "/away [message]"},
+    {"back", "", "Return from away", "/back"},
+    {"help", "?,commands", "Show available commands", "/help [command]"},
+    {"ignore", "", "Ignore a user (no name: list who you ignore)", "/ignore [user]"},
+    {"invite", "", "Invite a user to this invite-only channel (moderator only)", "/invite @user [#room]"},
+    {"join", "", "Join a channel", "/join #channel"},
+    {"kick", "", "Kick user from channel", "/kick @user [reason]"},
+    {"leave", "part", "Leave current channel", "/leave"},
+    {"love", "", "React with heart", "/love [msg-id]"},
+    {"nick", "", "Show your username", "/nick"},
+    {"msg", "dm,pm", "Send a direct message (1:1 or group). /msg @a [@b ...] text", "/msg @user [@user2 ...] message"},
+    {"mute", "", "Mute user in channel", "/mute @user [minutes]"},
+    {"op", "", "Give or take room operator status (sysop)", "/op @user  |  /op -@user  |  /deop @user"},
+    {"quit", "exit,bye,q", "Exit chat", "/quit"},
+    {"react", "+1,-1,heart,fire", "Add reaction to message", "/react [emoji] [msg-id]"},
+    {"reactions", "", "Show reactions", "/reactions [msg-id]"},
+    {"reply", "r", "Reply to a message (the newest by default)", "/reply [msg-id] message"},
+    {"rooms", "channels", "List all rooms", "/rooms"},
+    {"status", "", "Set custom status", "/status [online|away|busy|dnd] [message]"},
+    {"thread", "t", "Reply in thread", "/thread <msg-id> message"},
+    {"thumbsup", "like", "React with thumbs up", "/thumbsup [msg-id]"},
+    {"topic", "", "Set channel topic", "/topic <new topic>"},
+    {"unignore", "", "Stop ignoring a user", "/unignore <user>"},
+    {"unban", "", "Unban user from channel", "/unban @user"},
+    {"uninvite", "", "Revoke a pending invite", "/uninvite @user [#room]"},
+    {"unmute", "", "Unmute user in channel", "/unmute @user"},
+    {"unreact", "", "Remove reaction", "/unreact [emoji] [msg-id]"},
+    {"whois", "info", "Show user info", "/whois @user"},
+    {"who", "users,list", "List users in channel", "/who"},
+    {"compact", "", "Toggle compact mode", "/compact"},
+    {"timestamps", "time", "Toggle timestamps", "/timestamps"},
+    /* The rest of the TS registry (board/Doors/livechat/commands, one file per group). The door does not run these yet: they fall to the unknown-command path. */
+    {"delete", "", "Delete a channel", "/delete #channel"},
+    {"emoji", "", "Open emoji picker or search emojis", "/emoji [search]"},
+    {"emojis", "", "List all emojis or emojis in a category", "/emojis [category]"},
+    {"customemoji", "", "Add, remove or list the board's custom emoji (sysop adds)", "/customemoji add <name> <display> <ascii> | remove <name> | list"},
+    {"events", "", "Manage BBS event display preferences", "/events [on|off|logins|files|doors|messages|announcements]"},
+    {"mic", "", "List microphones, or switch to one", "/mic [number]"},
+    {"motd", "", "Set channel MOTD (moderator only; --clear to clear; no args = show current)", "/motd [text]  (use /motd --clear to clear)"},
+    {"mode", "", "Set channel or user modes (+i/+m/+o/+v/-X). Moderator only.", "/mode <modes> [param]"},
+    {"me", "", "Send an action message", "/me does something"},
+    {"pin", "", "Pin a message", "/pin <msg-id>"},
+    {"unpin", "", "Unpin a message", "/unpin <msg-id>"},
+    {"pinned", "pins", "Show pinned messages", "/pinned"},
+    {"sounds", "", "Toggle sound notifications", "/sounds [on|off]"},
+    {"search", "find", "Search messages", "/search [query]"},
+    {"draw", "whiteboard,art", "Open the drawing whiteboard (or join art:<name>)", "/draw [channel]"},
+    {"files", "file,share", "Open the file sharing browser", "/files"},
+    {"settings", "", "Open the settings", "/settings"},
+    {"voice", "vc", "Voice channel commands", "/voice [join <channel> | leave]"},
+    {"deafen", "deaf", "Deafen (mute audio output)", "/deafen"},
+    {"undeafen", "undeaf", "Undeafen (unmute audio output)", "/undeafen"},
+};
+
+
+const int lc_cmd_help_count = (int)(sizeof lc_cmd_help / sizeof lc_cmd_help[0]);
+
+static int lower(int ch) { return ch >= 'A' && ch <= 'Z' ? ch + 32 : ch; }
+
+static int has_sub(const char *s, const char *term)
+{
+    int n = (int)strlen(term), i;
+    if (n == 0) return 1;
+    for (i = 0; s[i] != '\0'; i++) {
+        int k = 0;
+        while (k < n && s[i + k] != '\0' && lower(s[i + k]) == lower(term[k])) k++;
+        if (k == n) return 1;
+    }
+    return 0;
+}
+
+int lc_slash_match(const char *input, int *idx, int max)
+{
+    const char *term;
+    int n = 0, pre[LC_SLASH_MAX], i, j, key, np;
+    if (input[0] != '/') return 0;
+    term = input + 1;
+    np = (int)strlen(term);
+    for (i = 0; i < lc_cmd_help_count && n < max && n < LC_SLASH_MAX; i++) {
+        const char *name = lc_cmd_help[i][0];
+        int p = 1;
+        for (j = 0; j < np; j++) if (lower(name[j]) != lower(term[j]) || name[j] == '\0') { p = 0; break; }
+        if (!p && !has_sub(lc_cmd_help[i][2], term)) continue;
+        /* insertion sort: prefix matches first, then by name */
+        key = p;
+        for (j = n; j > 0; j--) {
+            int o = idx[j - 1], c = strcmp(lc_cmd_help[o][0], name);
+            if (pre[j - 1] > key || (pre[j - 1] == key && c < 0)) break;
+            idx[j] = idx[j - 1]; pre[j] = pre[j - 1];
+        }
+        idx[j] = i; pre[j] = key;
+        n++;
+    }
+    return n;
+}
+
+void lc_slash_row(char *out, int cap, int cmd, int cols, int *ucol, int *ulen)
+{
+    const char *name = lc_cmd_help[cmd][0], *desc = lc_cmd_help[cmd][2], *usage = lc_cmd_help[cmd][3];
+    *ucol = 0; *ulen = 0;
+    if (cap < 1) return;
+    if (cols < 80) {
+        int room = cols - 4 < 8 ? 8 : cols - 4;
+        if (room > cap - 1) room = cap - 1;
+        if (desc[0] != '\0') sprintf(out, "/%s %s", name, desc); else sprintf(out, "/%s", name);
+        if ((int)strlen(out) > room) out[room] = '\0';
+        return;
+    }
+    {
+        int dw = cols - 12 - 20 - 6, ul, len;
+        char u[24];
+        if (dw < 10) dw = 10;
+        ul = (int)strlen(usage);
+        if (ul > 20) ul = 20;
+        memcpy(u, usage, (size_t)ul);
+        u[ul] = '\0';
+        len = sprintf(out, "/%-12.12s ", name);
+        *ucol = len;
+        *ulen = 20;
+        len += sprintf(out + len, "%-20s ", u);
+        sprintf(out + len, "%.*s", dw < cap - len - 1 ? dw : cap - len - 1, desc);
+    }
+}
+
+/** TS server.ts ghost completion: the top match, only when its name starts with the whole typed
+ *  term (input after "/", case ignored). Returns that command's index, or -1. Tab/Right fill it. */
+int lc_slash_ghost(const char *input, const int *idx, int n)
+{
+    const char *term = input + 1, *name;
+    int i = 0;
+    if (n <= 0 || input[0] != '/' || term[0] == '\0') return -1;
+    name = lc_cmd_help[idx[0]][0];
+    while (term[i] != '\0' && name[i] != '\0' && lower(term[i]) == lower(name[i])) i++;
+    return term[i] == '\0' ? idx[0] : -1;
+}
+
+int lc_slash_exact(const char *input, int cmd)
+{
+    int i = 0;
+    const char *name = lc_cmd_help[cmd][0];
+    while (input[0] == ' ') input++;
+    if (input[0] != '/') return 0;
+    input++;
+    while (name[i] != '\0' && lower(input[i]) == lower(name[i])) i++;
+    if (name[i] != '\0') return 0;
+    input += i;
+    while (*input == ' ') input++;
+    return *input == '\0';
+}
+
+int lc_slash_scroll(int sel, int top, int n)
+{
+    if (sel < top) top = sel;
+    if (sel >= top + LC_SLASH_ROWS) top = sel - LC_SLASH_ROWS + 1;
+    if (top > n - LC_SLASH_ROWS) top = n - LC_SLASH_ROWS;
+    return top < 0 ? 0 : top;
+}
+
+static void draw_slash(ui_cells *c, const lc_model *m)
+{
+    int idx[LC_SLASH_MAX], n, rows, top, i, W = c->cols, brow = c->rows - 4;
+    char row[200];
+    if (m->slash_off || m->focus != LC_FOCUS_INPUT || m->modal != LC_MODAL_NONE) return;
+    n = lc_slash_match(m->input, idx, LC_SLASH_MAX);
+    if (n == 0) return;
+    rows = n < LC_SLASH_ROWS ? n : LC_SLASH_ROWS;
+    top = lc_slash_scroll(m->slash_sel < n ? m->slash_sel : n - 1, m->slash_top, n);
+    if (brow - rows - 2 < 1) return;
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+    ui_cells_fill(c, brow - rows - 1, 1, rows, W - 2, ' ');
+    ui_cells_box(c, brow - rows - 2, 0, rows + 2, W, LC_ACCENT, " Commands ", LC_INK);
+    for (i = 0; i < rows; i++) {
+        int r = brow - rows - 1 + i, ucol, ulen, sel = top + i == m->slash_sel;
+        lc_slash_row(row, sizeof row, idx[top + i], W, &ucol, &ulen);
+        ui_cells_pen(c, sel ? LC_ACCENT : LC_INK, UI_CELLS_DEFAULT, 0);
+        ui_cells_text(c, r, 1, sel ? "> " : "  ", 2);
+        ui_cells_text(c, r, 3, row, W - 4);
+        if (ulen > 0) {                                  /* the usage column in the dim colour */
+            ui_cells_pen(c, LC_DIM, UI_CELLS_DEFAULT, 0);
+            if (ucol < W - 4) ui_cells_text(c, r, 3 + ucol, row + ucol, ulen < W - 4 - ucol ? ulen : W - 4 - ucol);
+        }
+    }
+    ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+}
+
 static void draw_help(ui_cells *c, const lc_model *m)
 {
     int top, left, h = c->rows - 2, w = c->cols - 4, i;
@@ -546,6 +738,7 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
                                m->menu_sel, LC_ACCENT, LC_INK, LC_ACCENT);
         ui_hit_add(&lc_hits, LC_HIT_DROPDOWN, 2, menu_col[m->menu], lc_menu_count[m->menu], mw - 2);
     }
+    draw_slash(c, m);
     if (m->ctx.open) {
         ui_popup_draw(c, &m->ctx, LC_ACCENT, LC_INK, LC_ACCENT, LC_ALERT);
         ui_hit_add(&lc_hits, LC_HIT_POPUP, m->ctx.top, m->ctx.left, m->ctx.n + 2, m->ctx.w);

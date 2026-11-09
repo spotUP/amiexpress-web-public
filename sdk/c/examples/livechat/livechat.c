@@ -1241,56 +1241,15 @@ static void react_typed(const char *cmd, const char *rest)
     if (rc != AE_CHAT_OK) show_error(rc);
 }
 
-/* TS /help <command>: name, aliases, description, usage - the registered text of the commands this door runs. */
-static const char *const cmd_help[][4] = {
-    {"ban", "", "Ban user from channel", "/ban @user [reason]"},
-    {"clear", "cls", "Clear chat display", "/clear"},
-    {"create", "", "Create a new channel. --private and --invite-only make it members-only.", "/create #name [topic] [--private] [--invite-only] [--motd \"text\"]"},
-    {"deletemsg", "delmsg", "Delete a message (your last by default)", "/deletemsg [msg-id]"},
-    {"edit", "", "Edit one of your messages (your last by default)", "/edit [msg-id] new text"},
-    {"away", "afk", "Set away status", "/away [message]"},
-    {"back", "", "Return from away", "/back"},
-    {"help", "?,commands", "Show available commands", "/help [command]"},
-    {"ignore", "", "Ignore a user (no name: list who you ignore)", "/ignore [user]"},
-    {"invite", "", "Invite a user to this invite-only channel (moderator only)", "/invite @user [#room]"},
-    {"join", "", "Join a channel", "/join #channel"},
-    {"kick", "", "Kick user from channel", "/kick @user [reason]"},
-    {"leave", "part", "Leave current channel", "/leave"},
-    {"love", "", "React with heart", "/love [msg-id]"},
-    {"nick", "", "Show your username", "/nick"},
-    {"msg", "dm,pm", "Send a direct message (1:1 or group). /msg @a [@b ...] text", "/msg @user [@user2 ...] message"},
-    {"mute", "", "Mute user in channel", "/mute @user [minutes]"},
-    {"op", "", "Give or take room operator status (sysop)", "/op @user  |  /op -@user  |  /deop @user"},
-    {"quit", "exit,bye,q", "Exit chat", "/quit"},
-    {"react", "+1,-1,heart,fire", "Add reaction to message", "/react [emoji] [msg-id]"},
-    {"reactions", "", "Show reactions", "/reactions [msg-id]"},
-    {"reply", "r", "Reply to a message (the newest by default)", "/reply [msg-id] message"},
-    {"rooms", "channels", "List all rooms", "/rooms"},
-    {"status", "", "Set custom status", "/status [online|away|busy|dnd] [message]"},
-    {"thread", "t", "Reply in thread", "/thread <msg-id> message"},
-    {"thumbsup", "like", "React with thumbs up", "/thumbsup [msg-id]"},
-    {"topic", "", "Set channel topic", "/topic <new topic>"},
-    {"unignore", "", "Stop ignoring a user", "/unignore <user>"},
-    {"unban", "", "Unban user from channel", "/unban @user"},
-    {"uninvite", "", "Revoke a pending invite", "/uninvite @user [#room]"},
-    {"unmute", "", "Unmute user in channel", "/unmute @user"},
-    {"unreact", "", "Remove reaction", "/unreact [emoji] [msg-id]"},
-    {"whois", "info", "Show user info", "/whois @user"},
-    {"who", "users,list", "List users in channel", "/who"},
-    {"compact", "", "Toggle compact mode", "/compact"},
-    {"timestamps", "time", "Toggle timestamps", "/timestamps"},
-};
-
-
 /** /help <command>: "/name - description" then the usage, or "Unknown: x". */
 static void help_for(const char *want)
 {
     unsigned i;
     char line[160], al[40];
     const char *p;
-    for (i = 0; i < sizeof cmd_help / sizeof cmd_help[0]; i++) {
-        int hit = strcmp(cmd_help[i][0], want) == 0;
-        for (p = cmd_help[i][1]; !hit && *p != '\0'; ) {
+    for (i = 0; i < (unsigned)lc_cmd_help_count; i++) {
+        int hit = strcmp(lc_cmd_help[i][0], want) == 0;
+        for (p = lc_cmd_help[i][1]; !hit && *p != '\0'; ) {
             int n = 0;
             while (*p != '\0' && *p != ',' && n < (int)sizeof al - 1) al[n++] = *p++;
             al[n] = '\0';
@@ -1298,9 +1257,9 @@ static void help_for(const char *want)
             hit = strcmp(al, want) == 0;
         }
         if (!hit) continue;
-        sprintf(line, "/%s - %.100s", cmd_help[i][0], cmd_help[i][2]);
+        sprintf(line, "/%s - %.100s", lc_cmd_help[i][0], lc_cmd_help[i][2]);
         system_line(line);
-        system_line(cmd_help[i][3]);
+        system_line(lc_cmd_help[i][3]);
         return;
     }
     sprintf(line, "Unknown: %.60s", want);
@@ -1670,6 +1629,51 @@ static void side_pick(void)
     }
 }
 
+/** The "/" menu (TS command-palette.ts): while the input starts with "/" and something matches, Up/Down
+ *  move, Tab/Right fill "/name ", Enter runs an exact "/name" or fills, Esc hides. Returns 1 when the key
+ *  was used; any other key falls through to the input and re-arms the menu. */
+static int slash_key(int key)
+{
+    int idx[LC_SLASH_MAX], n = lc_slash_match(M.input, idx, LC_SLASH_MAX), pick, ghost;
+    char fill[40];
+    if (n == 0) { M.slash_sel = 0; M.slash_top = 0; M.slash_off = 0; return 0; }
+    if (M.slash_off) {
+        if (!is_text(key) && key != 8 && key != 127) return 0;
+        M.slash_off = 0;                                 /* typing re-arms the menu (TS shows it after each key) */
+    }
+    if (M.slash_sel >= n) M.slash_sel = n - 1;
+    if (key == UI_KEY_UP || key == UI_KEY_DOWN) {
+        M.slash_sel += key == UI_KEY_UP ? -1 : 1;
+        if (M.slash_sel < 0) M.slash_sel = 0;
+        if (M.slash_sel > n - 1) M.slash_sel = n - 1;
+        M.slash_top = lc_slash_scroll(M.slash_sel, M.slash_top, n);
+        return 1;
+    }
+    if (key == UI_KEY_ESC) { M.slash_off = 1; return 1; }
+    if (key != 9 && key != UI_KEY_RIGHT && !is_enter(key)) {
+        M.slash_sel = 0; M.slash_top = 0;               /* an edit changes the term: selection restarts at the top */
+        return 0;
+    }
+    ghost = lc_slash_ghost(M.input, idx, n);
+    if (!is_enter(key)) {                                /* TS: Tab/Right accept the ghost; without one Tab hides, Right moves the cursor */
+        if (ghost < 0) {
+            if (key == 9) { M.slash_off = 1; return 1; }
+            return 0;
+        }
+        pick = ghost;
+    } else {
+        pick = ghost >= 0 ? ghost : idx[M.slash_sel];   /* TS enterOnCommandSuggestions: the ghost outranks the selected row */
+        if (lc_slash_exact(M.input, pick)) return 0;    /* "/name" typed in full: the normal submit runs it */
+    }
+    sprintf(fill, "/%s ", lc_cmd_help[pick][0]);
+    copy(M.input, sizeof M.input, fill);
+    M.input_len = M.input_cur = (int)strlen(M.input);
+    M.input_anchor = -1;
+    M.slash_sel = 0; M.slash_top = 0;
+    M.slash_off = 1;                                     /* TS hides the list after a fill; the next typed key re-arms it */
+    return 1;
+}
+
 /** One key. Returns 1 when the door should end. */
 static int handle_key(int key)
 {
@@ -1708,6 +1712,7 @@ static int handle_key(int key)
         return 0;
     }
     if (key == 17) { M.modal = LC_MODAL_QUIT; return 0; }
+    if (M.focus == LC_FOCUS_INPUT && M.pick[0] == '\0' && slash_key(key)) return 0;
     if (key == UI_KEY_F1) { open_help(); return 0; }
     if (key == UI_KEY_F2) { M.sidebar_hidden = !M.sidebar_hidden; if (M.focus == LC_FOCUS_SIDEBAR) set_focus(LC_FOCUS_INPUT); return 0; }
     if (key == UI_KEY_F3) { switch_tab(!M.side_tab); return 0; }

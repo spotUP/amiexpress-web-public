@@ -287,9 +287,44 @@ static int chat_cache_and_pane_fill(void)
     return fail;
 }
 
+static int slash_menu_rules(void)
+{
+    int idx[LC_SLASH_MAX], n, fail = 0, uc, ul, i;
+    char row[200];
+    n = lc_slash_match("/jo", idx, LC_SLASH_MAX);
+    if (n < 1 || strcmp(lc_cmd_help[idx[0]][0], "join") != 0) { printf("slash: /jo first is not join (n=%d)\n", n); fail = 1; }
+    n = lc_slash_match("/", idx, LC_SLASH_MAX);
+    if (n != lc_cmd_help_count) { printf("slash: bare / lists %d of %d\n", n, lc_cmd_help_count); fail = 1; }
+    for (i = 1; i < n; i++) if (strcmp(lc_cmd_help[idx[i - 1]][0], lc_cmd_help[idx[i]][0]) > 0) { printf("slash: bare / not alphabetical at %d\n", i); fail = 1; break; }
+    n = lc_slash_match("/mute", idx, LC_SLASH_MAX);          /* prefix first (mute), then description matches (unmute: "Unmute user") */
+    if (n < 2 || strcmp(lc_cmd_help[idx[0]][0], "mute") != 0 || strcmp(lc_cmd_help[idx[1]][0], "deafen") != 0) { printf("slash: /mute order\n"); fail = 1; }
+    n = lc_slash_match("/pin", idx, LC_SLASH_MAX);            /* a TS command the door does not run yet is still listed */
+    if (n < 3 || strcmp(lc_cmd_help[idx[0]][0], "pin") != 0 || strcmp(lc_cmd_help[idx[1]][0], "pinned") != 0 || lc_cmd_help_count != 56) { printf("slash: /pin n=%d count=%d\n", n, lc_cmd_help_count); fail = 1; }
+    n = lc_slash_match("/reaction", idx, LC_SLASH_MAX);
+    if (n < 1 || strcmp(lc_cmd_help[idx[0]][0], "reactions") != 0) { printf("slash: /reaction first\n"); fail = 1; }
+    n = lc_slash_match("/Away", idx, LC_SLASH_MAX);
+    if (n < 1 || strcmp(lc_cmd_help[idx[0]][0], "away") != 0) { printf("slash: case-insensitive\n"); fail = 1; }
+    if (lc_slash_match("/zzzz", idx, LC_SLASH_MAX) != 0 || lc_slash_match("hello", idx, LC_SLASH_MAX) != 0
+        || lc_slash_match("/join x", idx, LC_SLASH_MAX) != 0) { printf("slash: no-match cases\n"); fail = 1; }
+    n = lc_slash_match("/ban", idx, LC_SLASH_MAX);
+    lc_slash_row(row, sizeof row, idx[0], 80, &uc, &ul);
+    if (strncmp(row, "/ban          /ban @user [reason]  Ban user from channel", 56) != 0 || uc != 14 || ul != 20) { printf("slash: wide row '%s' %d %d\n", row, uc, ul); fail = 1; }   /* TS prints the usage as written, "/ban" included */
+    n = lc_slash_match("/jo", idx, LC_SLASH_MAX);
+    if (lc_slash_ghost("/jo", idx, n) != idx[0] || lc_slash_ghost("/", idx, lc_slash_match("/", idx, LC_SLASH_MAX)) != -1) { printf("slash: ghost prefix\n"); fail = 1; }
+    n = lc_slash_match("/annel", idx, LC_SLASH_MAX);          /* description-only matches: no ghost */
+    if (n < 1 || lc_slash_ghost("/annel", idx, n) != -1) { printf("slash: ghost on description match (n=%d)\n", n); fail = 1; }
+    lc_slash_row(row, sizeof row, idx[0], 40, &uc, &ul);
+    if (strcmp(row, "/ban Ban user from channel") != 0 || ul != 0) { printf("slash: compact row '%s'\n", row); fail = 1; }
+    lc_slash_row(row, sizeof row, 2, 20, &uc, &ul);           /* create: cut to max(8, cols-4) = 16 */
+    if (strlen(row) != 16) { printf("slash: compact cut %d\n", (int)strlen(row)); fail = 1; }
+    if (!lc_slash_exact("/join", 10) || lc_slash_exact("/joi", 10) || lc_slash_exact("/join x", 10) || !lc_slash_exact("/JOIN ", 10)) { printf("slash: exact\n"); fail = 1; }
+    if (lc_slash_scroll(0, 0, 35) != 0 || lc_slash_scroll(8, 0, 35) != 1 || lc_slash_scroll(2, 5, 35) != 2 || lc_slash_scroll(34, 0, 35) != 27 || lc_slash_scroll(3, 0, 5) != 0) { printf("slash: scroll\n"); fail = 1; }
+    return fail;
+}
+
 int main(void)
 {
-    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws();
+    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

@@ -863,6 +863,53 @@ static void test_door_scrollbar_drag(void)
     printf("  [OK] door: scrollbar press and drag scroll the chat, release ends the drag\n");
 }
 
+static void test_door_slash_menu(void)
+{
+    int rc;
+    start_stub();
+    rc = drive(KEYS("\r" "/jo"), 0);                       /* typed, then stdin ends: the last frame holds the menu */
+    assert(rc == 0);
+    assert(strstr(screen_text, "Commands"));
+    assert(strstr(screen_text, "/join"));
+    assert(strstr(screen_text, "#channel"));               /* the usage column */
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/pin"), 0);                      /* a TS command the door does not run yet is in the menu */
+    assert(rc == 0 && strstr(screen_text, "Pin a message") && strstr(screen_text, "Show pinned"));
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/jo" "\t" "x" "\x1b"), 0);
+    assert(rc == 0);
+    assert(strcmp(M.input, "/join x") == 0);                /* Tab filled "/join ", typing went on in the input */
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/jo" "\t"), 0);                  /* TS: a fill hides the list */
+    assert(rc == 0 && M.slash_off == 1 && strcmp(M.input, "/join ") == 0);
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/jo" "\x1b[B" "\r" "\x1b"), 0);   /* TS enterOnCommandSuggestions: the top prefix match outranks the moved selection */
+    assert(rc == 0 && strcmp(M.input, "/join ") == 0);
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/annel" "\t"), 0);              /* no prefix match: Tab hides the list, text stays */
+    assert(rc == 0 && M.slash_off == 1 && strcmp(M.input, "/annel") == 0);
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/jo" "\x1b"), 0);                 /* Esc hides the menu and keeps the text */
+    assert(rc == 0 && M.slash_off == 1 && strcmp(M.input, "/jo") == 0);
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/he" "\r" "\x1b"), 0);          /* Enter on a half-typed name fills */
+    assert(rc == 0 && strcmp(M.input, "/help ") == 0 && help_shown == 0);
+    stop_stub();
+    start_stub();
+    help_shown = 0;
+    rc = drive(KEYS("\r" "/help" "\r" "x" "/q\r"), 0);   /* Enter on the full name runs it: the help overlay opens */
+    assert(rc == 0 && help_shown >= 1);
+    stop_stub();
+    printf("  [OK] door: the / menu lists matches, Tab and Enter fill, a full name runs, Esc hides\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -870,6 +917,7 @@ int main(void)
     test_client();
     test_door_keys();
     test_door_lists();
+    test_door_slash_menu();
     test_door_idle_poll();
     test_door_idle_is_short_and_cadence_kept();
     test_door_poll_under_mouse_motion();

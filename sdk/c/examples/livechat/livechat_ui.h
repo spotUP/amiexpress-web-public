@@ -110,6 +110,8 @@ typedef struct {
     int ctx_kind;                  /* LC_CTX_* */
     int ctx_target;                /* side index (user, channel) or line index (chat) */
     char pick[24];                 /* the keyboard picker's message id, "" when not picking (TS message-picker.ts) */
+    int slash_sel, slash_top;      /* the "/" menu: selected match, first visible match */
+    int slash_off;                 /* Esc hid the menu until the next typed character */
     int editing;                   /* the input holds a recalled history line: Enter edits it (label [EDITING]) */
 } lc_model;
 
@@ -127,6 +129,25 @@ extern const int lc_menu_count[LC_MENUS];
 extern const char *const *const lc_menu_items[LC_MENUS];
 extern const char *const lc_help_text[];
 extern const int lc_help_lines;
+
+/* ---- The "/" command menu (TS ui/command-palette.ts). The list is lc_cmd_help, the table /help reads. ---- */
+extern const char *const lc_cmd_help[][4];     /* name, aliases, description, usage */
+extern const int lc_cmd_help_count;
+#define LC_SLASH_MAX   64                      /* matches kept (more than the table holds) */
+#define LC_SLASH_ROWS  8                       /* visible rows */
+/** Fills idx[] with the commands matching `input` (must start with "/"; term = the rest): name starts
+ *  with the term or the description contains it, case-insensitive; name-prefix matches first, then
+ *  alphabetical. Returns the count, 0 when input does not start with "/". */
+int lc_slash_match(const char *input, int *idx, int max);
+/** One row's text for a `cols`-wide screen. At 80+ columns "/" name(12) " " usage(20) " " description,
+ *  ucol and ulen get the usage's byte range (dim); narrower "/name description" cut to cols-4 (ulen 0). */
+void lc_slash_row(char *out, int cap, int cmd, int cols, int *ucol, int *ulen);
+/** 1 when `input` is exactly "/name" for command `cmd` (Enter then runs it instead of filling). */
+int lc_slash_exact(const char *input, int cmd);
+/** Top match when its name starts with the typed term (TS ghost completion), else -1. */
+int lc_slash_ghost(const char *input, const int *idx, int n);
+/** The new first-visible match that keeps `sel` inside LC_SLASH_ROWS of `n` matches. */
+int lc_slash_scroll(int sel, int top, int n);
 
 void lc_model_init(lc_model *m, int cols, int rows);
 /** Call after ANY change to m->lines or m->nlines (add, remove, edit, reaction): draw_chat caches each
