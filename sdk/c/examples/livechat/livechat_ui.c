@@ -539,6 +539,13 @@ void lc_line_marked(const lc_line *l, char *out, int cap, int stamps, int width)
     case LC_ACTIVITY_LINE:
         sb_fg(&b, LC_ACTIVITY); sb_ch(&b, '['); sb_str(&b, l->time); sb_str(&b, "] "); sb_str(&b, l->text);
         break;
+    case LC_EVENT:
+        if (l->time[0] != '\0') { sb_fg(&b, LC_ACCENT); sb_ch(&b, '['); sb_str(&b, l->time); sb_ch(&b, ']'); sb_ch(&b, UI_CELLS_M_BASE); sb_ch(&b, ' '); }
+        sb_fg(&b, l->tone); sb_str(&b, l->head); sb_ch(&b, UI_CELLS_M_BASE);
+        if (l->body_tone > 0) sb_fg(&b, l->body_tone);
+        sb_str(&b, l->text);
+        if (l->pb) { sb_ch(&b, UI_CELLS_M_BASE); sb_ch(&b, ' '); sb_fg(&b, LC_EV_LIGHTGREEN); sb_str(&b, "[NEW PB!]"); }
+        break;
     case LC_HISTORY:                                  /* [hh:mm] <nick> text */
         if (stamps) { sb_fg(&b, LC_DIM); sb_ch(&b, '['); sb_str(&b, l->time); sb_str(&b, "] "); sb_ch(&b, UI_CELLS_M_BASE); }
         sb_str(&b, "<");

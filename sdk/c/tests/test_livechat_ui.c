@@ -384,9 +384,28 @@ static int slash_menu_rules(void)
     return fail;
 }
 
+/* H2: an LC_EVENT line is TS formatEvent: "[HH:MM] " in accent, the head in its tone, the body in
+ * the pen (or body_tone), and " [NEW PB!]" in light green for a personal best. */
+static int event_line_marks(void)
+{
+    lc_line l;
+    char out[400];
+    int fail = 0;
+    memset(&l, 0, sizeof l);
+    l.kind = LC_EVENT; strcpy(l.time, "17:03"); strcpy(l.head, "[Tetris]"); strcpy(l.text, " bob: 9000");
+    l.tone = LC_EV_YELLOW; l.pb = 1;
+    lc_line_marked(&l, out, sizeof out, 1, 0);
+    if (strcmp(out, "\001\314[17:03]\004 \001\003[Tetris]\004 bob: 9000\004 \001\012[NEW PB!]") != 0) { printf("event: '%s'\n", out); fail = 1; }
+    l.time[0] = '\0'; strcpy(l.head, "[EVENT] "); strcpy(l.text, "bob has logged off");
+    l.tone = LC_DIM; l.body_tone = LC_EV_RED; l.pb = 0;
+    lc_line_marked(&l, out, sizeof out, 1, 0);
+    if (strcmp(out, "\001\360[EVENT] \004\001\001bob has logged off") != 0) { printf("event legacy: '%s'\n", out); fail = 1; }
+    return fail;
+}
+
 int main(void)
 {
-    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules() | message_formatting();
+    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules() | message_formatting() | event_line_marks();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

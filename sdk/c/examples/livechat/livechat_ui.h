@@ -33,7 +33,22 @@
 
 /* LC_NOTE: a line of the door's own in the accent colour, no time (TS addChatMessage(text, false)
    with an accent tag, e.g. "[bob reacted heart]"). */
-enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE };
+/* LC_EVENT: a board event (hub "bbs" row), TS handlers/bbs-event.handler.ts formatEvent and the
+   legacy "[EVENT] ..." feed line (server.ts updateEventsFeed): "[hh:mm] " in the accent when the line
+   has a time, `head` in `tone`, `text` in `body_tone` (0: the pen), then " [NEW PB!]" when `pb`. */
+enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE, LC_EVENT };
+
+/* The TS event tags on this theme (sdk/engines/ui/theme/tokens.ts), as cell colours. A cell colour
+   is 1..255, so blessed "black" (T.bar) is xterm 16. */
+#define LC_EV_OK         78    /* T.ok #57E389 */
+#define LC_EV_BAR        16    /* T.bar 'black' */
+#define LC_EV_GREEN      2
+#define LC_EV_YELLOW     3
+#define LC_EV_RED        1
+#define LC_EV_BLUE       4
+#define LC_EV_CYAN       6
+#define LC_EV_WHITE      7
+#define LC_EV_LIGHTGREEN 10
 
 /* A message's reaction counts, one per emoji, in the server's order (first reacted first). The
    TS door keeps the same per-message map (features/reaction-store.ts); this door paints it on its
@@ -60,6 +75,9 @@ typedef struct {
     int nreact;
     int edited;            /* an edit event replaced the text: " (edited)" after it */
     char quote[96];        /* "parent: snippet" of the message this replies to, "" when none is loaded */
+    char head[48];         /* LC_EVENT: "* bob", "[Tetris]", "[EVENT] " */
+    int tone, body_tone;   /* LC_EVENT colours */
+    int pb;                /* LC_EVENT: a personal best tag */
 } lc_line;
 
 enum { LC_SIDE_HEAD, LC_SIDE_ROOM, LC_SIDE_USER, LC_SIDE_DM, LC_SIDE_BLANK };

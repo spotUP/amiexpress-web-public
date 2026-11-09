@@ -171,6 +171,44 @@ long ae_req_url_escape(const char *s, char *out, unsigned long cap)
     return (long)i;
 }
 
+static int hex_digit(int c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+int ae_req_form_value(const char *query, const char *key, char *out, unsigned long cap)
+{
+    const char *p = query;
+    unsigned long klen, n = 0;
+    if (out == 0 || cap == 0) return -1;
+    out[0] = '\0';
+    if (query == 0 || key == 0) return 0;
+    klen = (unsigned long)strlen(key);
+    while (*p != '\0') {
+        const char *end = strchr(p, '&');
+        if (end == 0) end = p + strlen(p);
+        if ((unsigned long)(end - p) > klen && strncmp(p, key, klen) == 0 && p[klen] == '=') {
+            for (p += klen + 1; p < end; p++) {
+                int c = (unsigned char)*p, hi, lo;
+                if (c == '+') c = ' ';
+                else if (c == '%' && end - p > 2 && (hi = hex_digit(p[1])) >= 0 && (lo = hex_digit(p[2])) >= 0) {
+                    c = hi * 16 + lo;
+                    p += 2;
+                }
+                if (n + 1 >= cap) { out[n] = '\0'; return -1; }
+                out[n++] = (char)c;
+            }
+            out[n] = '\0';
+            return 1;
+        }
+        p = *end == '&' ? end + 1 : end;
+    }
+    return 0;
+}
+
 /* The reply, kept only as far as it fits: the door needs the scalar fields at
  * the front, not a long body. */
 typedef struct {

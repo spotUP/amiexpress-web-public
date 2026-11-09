@@ -95,6 +95,15 @@ int ae_req_action(const ae_req_config *cfg, long id, const char *action,
 long ae_req_url_escape(const char *s, char *out, unsigned long cap);
 
 /**
+ * The value of `key` in a form-encoded query string ("a=1&b=x%20y", the
+ * shape URLSearchParams.toString() writes), decoded: "+" is a space and %XX
+ * is that byte. Writes "" when the key is absent. Returns 1 when the key was
+ * found, 0 when absent, -1 when the decoded value would not fit `cap` (out
+ * then holds as much as fits).
+ */
+int ae_req_form_value(const char *query, const char *key, char *out, unsigned long cap);
+
+/**
  * The JSON a POST /requests becomes, exposed for a door that wants to log it
  * and for the tests. Writes at most `size` bytes including the NUL and returns
  * the length written, or -1 when it would not fit or a required field is

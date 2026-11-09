@@ -812,6 +812,64 @@ static void test_door_board_joined(void)
     printf("  [OK] door: a board_joined event says the board joined the federation\n");
 }
 
+/* H2: a hub "bbs" row (node|user|type|at|data, data form-encoded) renders the TS door's two
+ * bbs:event listeners: the legacy "[EVENT]" + system line for logins (under the logins filter),
+ * then formatEvent's line. Guest is skipped. */
+static int has_event(const char *head, const char *text, int tone)
+{
+    int i;
+    for (i = 0; i < M.nlines; i++)
+        if (M.lines[i].kind == LC_EVENT && strcmp(M.lines[i].head, head) == 0
+            && strstr(M.lines[i].text, text) != 0 && (tone < 0 || M.lines[i].tone == tone)) return 1;
+    return 0;
+}
+
+static void bbs_row(const char *row)
+{
+    start_stub();
+    strcpy(st->pending_row, row);
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;
+    drive(KEYS("\r" "/q\r"), 1);
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+}
+
+static void test_door_bbs_events(void)
+{
+    bbs_row("bbs|2|alice|user_login|1700000500|0|location=Stockholm%2C+SE");
+    assert(has_event("[EVENT] ", "alice has logged in (Node 2)", LC_DIM));
+    assert(has_line(0, "alice has logged in (Node 2)"));
+    assert(has_event("* alice", " logged in from Stockholm, SE (Node 2)", LC_EV_OK));
+    stop_stub();
+    bbs_row("bbs|1|bob|user_logout|1700000500|0|duration=125");
+    assert(has_event("[EVENT] ", "bob has logged off", LC_DIM));
+    assert(has_event("* bob", " logged out after 2m 5s (Node 1)", LC_ACTIVITY));
+    stop_stub();
+    ev_logins = 0; events_sync();
+    bbs_row("bbs|1|bob|user_login|1700000500|0|");
+    assert(!has_event("[EVENT] ", "bob has logged in", -1) && !has_line(0, "bob has logged in"));
+    assert(has_event("* bob", " logged in from Unknown (Node 1)", LC_EV_OK));   /* formatEvent is unfiltered */
+    stop_stub();
+    ev_logins = 1; events_sync();
+    bbs_row("bbs|1|Guest|user_login|1700000500|0|location=x");
+    assert(!has_event("* Guest", "logged in", -1) && !has_line(0, "Guest has logged in"));
+    stop_stub();
+    bbs_row("bbs|3|carol|upload|1700000500|0|fileName=demo.lha&fileSize=10240&conferenceName=Amiga");
+    assert(has_event("* carol", " uploaded demo.lha (10.0KB) to Amiga", LC_EV_BAR));
+    stop_stub();
+    bbs_row("bbs|3|carol|custom_door_event|1700000500|0|doorName=Tetris&eventType=score&message=scored+9000&isPersonalBest=true");
+    assert(has_event("[Tetris]", " carol: scored 9000", LC_EV_YELLOW));
+    {
+        int i, pb = 0;
+        for (i = 0; i < M.nlines; i++) if (strcmp(M.lines[i].head, "[Tetris]") == 0) pb = M.lines[i].pb;
+        assert(pb);
+    }
+    stop_stub();
+    bbs_row("bbs|3|carol|door_activity|1700000500|0|action=exited&doorName=Frogger");
+    assert(has_event("* carol", " exited door Frogger", LC_EV_YELLOW));
+    stop_stub();
+    printf("  [OK] door: hub bbs rows render the TS bbs:event lines, Guest skipped, logins filtered\n");
+}
+
 /* D12: who.txt statuses mark the user list, and a presence event updates the mark and the text. */
 static void test_door_b4_marks(void)
 {
@@ -993,6 +1051,7 @@ int main(void)
     test_door_delete_and_kicked();
     test_door_b4_presence();
     test_door_board_joined();
+    test_door_bbs_events();
     test_door_b4_marks();
     test_door_b4_ignore();
     test_door_b4_user_menu();

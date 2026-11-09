@@ -92,6 +92,21 @@ TEST(url_escape_refuses_when_it_would_not_fit)
     ASSERT_EQ(ae_req_url_escape("a space", out, sizeof out), -1, "no room is -1");
 }
 
+TEST(form_value_decodes_plus_and_percent_and_matches_whole_keys)
+{
+    char out[32];
+    const char *q = "fileSize=2048&fileName=a+b%26c.lha&size=9&bad=%zz";
+    ASSERT_EQ(ae_req_form_value(q, "fileName", out, sizeof out), 1, "key found");
+    ASSERT_TRUE(strcmp(out, "a b&c.lha") == 0, "+ is a space, %26 an ampersand");
+    ASSERT_EQ(ae_req_form_value(q, "size", out, sizeof out), 1, "size is not fileSize's tail");
+    ASSERT_TRUE(strcmp(out, "9") == 0, "the whole key matches");
+    ASSERT_EQ(ae_req_form_value(q, "bad", out, sizeof out), 1, "bad escape kept");
+    ASSERT_TRUE(strcmp(out, "%zz") == 0, "a broken %XX is literal");
+    ASSERT_EQ(ae_req_form_value(q, "location", out, sizeof out), 0, "absent key");
+    ASSERT_TRUE(out[0] == '\0', "absent writes empty");
+    ASSERT_EQ(ae_req_form_value(q, "fileName", out, 4), -1, "too long is -1");
+}
+
 /* ------------------------------------------------------------- the wire */
 
 static ae_req_config config_for(int port)
@@ -281,6 +296,7 @@ int main(void)
     RUN_TEST(a_body_that_would_not_fit_is_refused_rather_than_truncated);
     RUN_TEST(url_escape_keeps_unreserved_and_percent_encodes_the_rest);
     RUN_TEST(url_escape_refuses_when_it_would_not_fit);
+    RUN_TEST(form_value_decodes_plus_and_percent_and_matches_whole_keys);
     RUN_TEST(a_post_sends_the_board_key_and_the_json);
     RUN_TEST(the_reply_tells_the_door_the_id_and_state);
     RUN_TEST(an_action_posts_to_the_action_path_with_the_handle);

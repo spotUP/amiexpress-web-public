@@ -45,6 +45,7 @@
 #include "ae_host.h"
 #include "ae_http.h"
 #include "ae_net.h"
+#include "ae_request.h"
 #include "ae_session.h"
 #include "ui_ansi.h"
 #include "ui_cells.h"
@@ -596,6 +597,101 @@ static void side_presence(const char *user, const char *text)
 static int event_hidden(const char *type);
 static void thread_view(const char *msg_id);
 
+/** One event line: `at` (null: no time), `head` in `tone`, `body` in `body_tone` (0: the pen). */
+static void add_event(const char *at, int tone, const char *head, int body_tone, const char *body, int pb)
+{
+    lc_line *l = line_slot(M.nlines);
+    l->kind = LC_EVENT;
+    l->seq = chat.last_seq;
+    if (at != 0) hhmm_of(l->time, at);
+    clean(l->head, sizeof l->head, head);
+    clean(l->text, sizeof l->text, body);
+    l->tone = tone;
+    l->body_tone = body_tone;
+    l->pb = pb;
+    M.scroll = 0;
+}
+
+/** " (12.3KB)" for a byte count, "" for none: TS (fileSize / 1024).toFixed(1), in whole numbers for the 68K. */
+static void kb_text(char *out, const char *size)
+{
+    long n = atol(size), tenths = (n * 10 + 512) / 1024;
+    if (n <= 0) { out[0] = '\0'; return; }
+    sprintf(out, " (%ld.%ldKB)", tenths / 10, tenths % 10);
+}
+
+/** A hub "bbs" row (label = node, user, ref = the board's event type, text = its data, form-encoded):
+ *  the TS door's two bbs:event listeners. The legacy one (chat-socket-handlers.ts:81) is registered
+ *  first (server.ts:2504) and adds the "[EVENT]" feed line and a system line for logins, under the
+ *  logins filter; BBSEventHandler.formatEvent (handlers/bbs-event.handler.ts) adds one line for every
+ *  type, unfiltered. Guest is skipped by both. */
+static void take_bbs_event(const char *at, const char *node, const char *user, const char *type, const char *data)
+{
+    char head[48], body[LC_TEXT_MAX], a[204], b[204], c[204], kb[24];
+    int login = strcmp(type, "user_login") == 0, logout = strcmp(type, "user_logout") == 0;
+    if (strcmp(user, "Guest") == 0) return;
+    if ((login || logout) && !event_hidden(type)) {
+        if (login) sprintf(body, "%.30s has logged in (Node %.6s)", user, node);
+        else sprintf(body, "%.30s has logged off", user);
+        add_event(0, LC_DIM, "[EVENT] ", login ? LC_EV_GREEN : LC_EV_RED, body, 0);
+        system_line(body);
+    }
+    sprintf(head, "* %.40s", user);
+    if (login) {
+        ae_req_form_value(data, "location", a, sizeof a);
+        sprintf(body, " logged in from %.120s (Node %.6s)", a[0] != '\0' ? a : "Unknown", node);
+        add_event(at, LC_EV_OK, head, 0, body, 0);
+    } else if (logout) {
+        long d;
+        ae_req_form_value(data, "duration", a, sizeof a);
+        d = atol(a);
+        if (d != 0) sprintf(b, " after %ldm %lds", d / 60, d % 60); else b[0] = '\0';
+        sprintf(body, " logged out%s (Node %.6s)", b, node);
+        add_event(at, LC_ACTIVITY, head, 0, body, 0);
+    } else if (strcmp(type, "upload") == 0 || strcmp(type, "download") == 0) {
+        int up = type[0] == 'u';
+        ae_req_form_value(data, "fileName", a, sizeof a);
+        ae_req_form_value(data, "fileSize", b, sizeof b);
+        kb_text(kb, b);
+        ae_req_form_value(data, "conferenceName", c, sizeof c);
+        sprintf(body, " %s %.100s%s%s%.80s", up ? "uploaded" : "downloaded", a, kb,
+                c[0] == '\0' ? "" : up ? " to " : " from ", c);
+        add_event(at, up ? LC_EV_BAR : LC_ACTIVITY, head, 0, body, 0);
+    } else if (strcmp(type, "door_activity") == 0) {
+        int entered;
+        ae_req_form_value(data, "action", a, sizeof a);
+        entered = strcmp(a, "entered") == 0;
+        ae_req_form_value(data, "doorName", b, sizeof b);
+        sprintf(body, " %s door %.120s", entered ? "entered" : "exited", b);
+        add_event(at, entered ? LC_EV_GREEN : LC_EV_YELLOW, head, 0, body, 0);
+    } else if (strcmp(type, "custom_door_event") == 0) {
+        int tone = LC_EV_WHITE, score, pb = 0;
+        ae_req_form_value(data, "doorName", a, sizeof a);
+        ae_req_form_value(data, "eventType", b, sizeof b);
+        ae_req_form_value(data, "message", c, sizeof c);
+        if (b[0] == '\0') strcpy(b, "event");
+        score = strcmp(b, "score") == 0 || strcmp(b, "score_submitted") == 0;
+        if (score) tone = LC_EV_YELLOW;
+        else if (strstr(b, "create") || strstr(b, "add") || strstr(b, "new")) tone = LC_EV_GREEN;
+        else if (strstr(b, "delete") || strstr(b, "remove")) tone = LC_EV_RED;
+        else if (strstr(b, "complete") || strstr(b, "done") || strstr(b, "finish")) tone = LC_EV_BLUE;
+        else if (strstr(b, "achievement") || strstr(b, "unlock")) tone = LC_EV_YELLOW;
+        else if (strstr(b, "update") || strstr(b, "edit") || strstr(b, "move")) tone = LC_EV_CYAN;
+        sprintf(head, "[%.40s]", a[0] != '\0' ? a : "Unknown");
+        if (strcmp(b, "match_result") == 0) tone = LC_ACTIVITY;
+        sprintf(body, " %.30s%s%.150s", user, strcmp(b, "match_result") == 0 ? " " : ": ", c[0] != '\0' ? c : "No message");
+        if (score) {
+            char flag[8];
+            ae_req_form_value(data, "isPersonalBest", flag, sizeof flag);
+            pb = strcmp(flag, "true") == 0;
+        }
+        add_event(at, tone, head, 0, body, pb);
+    } else {
+        sprintf(head, "* Unknown event: %.20s", type);
+        add_event(at, LC_DIM, head, 0, "", 0);
+    }
+}
+
 static void take_events(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
@@ -657,6 +753,8 @@ static void take_events(void)
             M.room[0] = '\0';
         } else if (strcmp(type, "muted") == 0 && strcmp(user, handle) == 0 && in_room) {
             system_line("You have been muted");
+        } else if (strcmp(type, "bbs") == 0) {
+            take_bbs_event(f[5], room, user, ref, f[7]);
         } else if (strcmp(type, "board_joined") == 0 && f[7][0] != '\0') {
             /* hub board_joined (no room): a new board registered; web chat says the same (chat-session-bridge) */
             sprintf(line, "%.80s joined the federation", f[7]);
@@ -1287,7 +1385,7 @@ static void events_sync(void)
 }
 
 /** True when the preferences hide this BBS event type: TS socket-typing.ts shouldShowEvent, same
- *  type names and grouping. Unknown types show. The hub relays no bbs:event to doors yet. */
+ *  type names and grouping. Unknown types show. Gates the legacy login lines of take_bbs_event. */
 static int event_hidden(const char *type)
 {
     static const char *const logins[] = { "user_login", "user_logout", 0 };
