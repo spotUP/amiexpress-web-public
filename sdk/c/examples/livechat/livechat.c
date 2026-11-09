@@ -29,8 +29,9 @@
  * TS ones (/join /leave /create /rooms /who /msg /reply /react /thread /clear /help
  * /quit) and the old short forms (/j /n /np /l /w /d /r /t /? /q).
  *
- * Menu entries the TS door has but this wire does not (emoji picker, files,
- * pins, search, themes) are drawn and do nothing: no fake data.
+ * Everything the TS door has is ported. Voice, microphone, video and drawing
+ * answer "not on Amiga yet"; Files behaves as the TS door's does (the hub has
+ * no file store yet).
  */
 
 #include <ctype.h>

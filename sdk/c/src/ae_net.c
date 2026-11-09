@@ -167,7 +167,7 @@ int ae_net_open_tls(const char *host, int port, int timeout_secs)
 /* bsdsocket.library's WaitSelect() timeout parameter - what it actually
  * expects, determined by experiment rather than assumed:
  *
- * The master .sfd (~/Code/Reference/NDK3.2R4/
+ * The master .sfd (NDK3.2R4/
  * SANA+RoadshowTCP-IP/sfd/bsdsocket_lib.sfd:34) says "struct timeval
  * *_timeout". The vendored NDK's own DOCUMENTATION copy of
  * inline/bsdsocket_protos.h renames that to "struct __timeval *" in its
@@ -182,7 +182,7 @@ int ae_net_open_tls(const char *host, int port, int timeout_secs)
  * not an alias shim; it is supplying a real, complete "struct timeval".
  *
  * That struct is reachable from the vendored NDK: <sys/socket.h> (see
- * ~/Code/Reference/NDK3.2R4/SANA+RoadshowTCP-IP/
+ * NDK3.2R4/SANA+RoadshowTCP-IP/
  * netinclude/sys/socket.h, bottom of file) includes <devices/timer.h> and
  * then "#define tv_sec tv_secs" / "#define tv_usec tv_micro", giving
  * POSIX-named field access on top of the AmigaOS-native struct - exactly
@@ -191,7 +191,7 @@ int ae_net_open_tls(const char *host, int port, int timeout_secs)
  * wraps tv_sec/tv_secs (and tv_usec/tv_micro) in anonymous unions, a GNU
  * extension vbcc does not accept (warning 53, "struct/union member needs
  * identifier") - so the build points -I at the ORIGINAL NDK3.2R4 copy
- * (~/Code/Reference/NDK3.2R4/Include_H/devices/timer.h,
+ * (NDK3.2R4/Include_H/devices/timer.h,
  * a plain non-union struct) ahead of it. See the task-4 report's fix-round
  * section for the exact include order and vbcc transcript (0 warnings). */
 #include <devices/timer.h>

@@ -103,3 +103,11 @@ sysop again. You get a new board key; ask the chat operators to retire
 the old one if you lost control of it.
 
 Questions and bug reports: https://bbs.uprough.net
+
+SOURCE AND PORTING
+
+The full C source is in the src drawer of this archive and at
+https://github.com/spotUP/livechat68 (MIT license, see src/LICENSE).
+"make" rebuilds this exact LIVECHAT68 with vbcc; "make test" builds and
+tests the door on any C99 machine. To run it on another BBS, read
+src/PORTING.txt: only the layer that talks to the board changes.

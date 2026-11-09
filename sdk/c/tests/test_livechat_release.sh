@@ -7,6 +7,10 @@ L=$(lha l build/release/LiveChat68.lha)
 for f in LIVECHAT68 LC.info LIVECHAT.cfg.example README.txt; do
   echo "$L" | grep -q "LiveChat68/$f\$" || { echo "FAIL: $f missing"; exit 1; }
 done
+for f in Makefile LICENSE PORTING.txt README.md examples/livechat/livechat.c include/aedoor.h \
+         src/ae_transport_native.c tests/test_chat.c; do
+  echo "$L" | grep -q "LiveChat68/src/$f\$" || { echo "FAIL: src/$f missing"; exit 1; }
+done
 # the README is the real one, the icon is a binary DiskObject (magic 0xE310)
 grep -q '^FIRST RUN (SYSOP)' ../../board/Doors/LIVECHAT68/README.txt || { echo "FAIL: README not the real one"; exit 1; }
 [ "$(head -c2 tools/release/LC.info | od -An -tx1 | tr -d ' \n')" = e310 ] || { echo "FAIL: LC.info not a DiskObject"; exit 1; }

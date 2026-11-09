@@ -23,6 +23,9 @@ if [ -n "${LIVECHAT_BIN:-}" ]; then
   [ -f "$LIVECHAT_BIN" ] || { echo "livechat-release: missing $LIVECHAT_BIN" >&2; exit 1; }
   cp "$LIVECHAT_BIN" "$STAGE/LIVECHAT68"
 fi
+# The portable source (door + the SDK files it needs, Makefile, LICENSE,
+# PORTING.txt) so sysops can rebuild or port it. Same tree as spotUP/livechat68.
+tools/livechat-source-tree.sh "$STAGE/src" >/dev/null
 # Safety: no cfg (it may hold a real key) may ever be staged. Case-insensitive.
 if find "$STAGE" -iname 'LIVECHAT.cfg' | grep -q .; then
   echo "livechat-release: LIVECHAT.cfg would be staged - refusing" >&2
