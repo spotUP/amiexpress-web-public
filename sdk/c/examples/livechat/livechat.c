@@ -402,12 +402,33 @@ static void message_modal(const char *title, const char *text)
     copy(M.modal_text, sizeof M.modal_text, text);
 }
 
+/** Errors waiting behind the open modal, '|'-separated: TS opens one room:error modal per error,
+ *  so each shows after the one before it is closed. */
+static char modal_next[200];
+
+static void modal_close(void)
+{
+    char one[96];
+    char *bar;
+    int n;
+    M.modal = LC_MODAL_NONE;
+    if (modal_next[0] == '\0') return;
+    bar = strchr(modal_next, '|');
+    n = bar != 0 ? (int)(bar - modal_next) : (int)strlen(modal_next);
+    if (n > (int)sizeof one - 1) n = (int)sizeof one - 1;
+    memcpy(one, modal_next, (size_t)n);
+    one[n] = '\0';
+    if (bar != 0) memmove(modal_next, bar + 1, strlen(bar + 1) + 1); else modal_next[0] = '\0';
+    message_modal("Error", one);
+}
+
 /** What the server's error code means to a caller, as the TS door's error modal. */
 static void show_error(int rc)
 {
     const char *t;
     if (rc == AE_CHAT_ERR_TRANSPORT) t = "Cannot reach the chat server.";
     else if (strcmp(chat.error, "muted") == 0) t = "You are muted in this room.";
+    else if (strcmp(chat.error, "moderated") == 0) t = "Room is moderated (+m); you need voice (+v) or op (+o) to speak";
     else if (strcmp(chat.error, "banned") == 0) t = "You are banned from this room.";
     else if (strcmp(chat.error, "not_member") == 0) t = "Join the room first.";
     else if (strcmp(chat.error, "not_found") == 0) t = "Not found.";
@@ -860,6 +881,10 @@ static void take_events(void)
             clean(room_motd, sizeof room_motd, f[7]);
             if (room_motd[0] != '\0') sprintf(line, "[MOTD] %.200s", room_motd);
             else strcpy(line, "[MOTD] cleared");
+            motd_line(line);
+        } else if (strcmp(type, "mode") == 0 && in_room && f[7][0] != '\0') {
+            /* TS room:mode: {accentAlt}[by] set mode <applied>{/accentAlt} */
+            sprintf(line, "[%.24s] set mode %.160s", user[0] != '\0' ? user : "?", f[7]);
             motd_line(line);
         } else if ((strcmp(type, "op") == 0 || strcmp(type, "deop") == 0) && in_room) {
             sprintf(line, "%.24s is %s a room operator", user[0] != '\0' ? user : "Someone", type[0] == 'd' ? "no longer" : "now");
@@ -2008,6 +2033,39 @@ static void motd_typed(const char *rest)
     then_poll(ae_chat_room_motd(&chat, room_id, strcmp(rest, "--clear") == 0 ? "" : rest));
 }
 
+/** /mode <+modes> [param ...]: TS commands/mode.ts; the hub applies it as web/backend mode.handler.ts.
+ * Each per-flag refusal is a TS room:error modal, shown one after another. */
+static void mode_typed(const char *rest)
+{
+    char modes[72], a[48], user[64], params[200], applied[200], errors[200];
+    const char *p;
+    int rc;
+    arg_word(rest, modes, sizeof modes);
+    if (modes[0] == '\0') { usage("/mode <+modes> [param]  e.g. /mode +i  or /mode +o alice"); return; }
+    if ((modes[0] != '+' && modes[0] != '-') || !isalpha((unsigned char)modes[1])) {
+        system_line("Error: Mode string must start with + or -");
+        return;
+    }
+    if (room_id[0] == '\0') { message_modal("Error", "Not in a room"); return; }
+    params[0] = '\0';
+    for (p = after_word(rest); *p != '\0'; p = after_word(p)) {
+        arg_word(p, a, sizeof a);
+        if (a[0] == '\0') break;
+        target_user(a, user, sizeof user, 0, 0);
+        if (strlen(params) + strlen(user) + 2 > sizeof params) break;
+        if (params[0] != '\0') strcat(params, " ");
+        strcat(params, user);
+    }
+    rc = ae_chat_mode(&chat, room_id, modes, params, applied, sizeof applied, errors, sizeof errors);
+    if (rc == AE_CHAT_ERR_STATUS && strcmp(chat.error, "forbidden") == 0) { message_modal("Error", "Only moderators can change modes"); return; }
+    if (rc == AE_CHAT_ERR_STATUS && strcmp(chat.error, "bad_request") == 0) { message_modal("Error", "Mode string must start with + or -"); return; }
+    if (rc == AE_CHAT_OK && errors[0] != '\0') {
+        copy(modal_next, sizeof modal_next, errors);
+        modal_close();
+    }
+    then_poll(rc);
+}
+
 /** /emoji <query> and /emojis [category] (TS commands/emoji.ts): the lists print as system lines. */
 static void emoji_search_typed(const char *query)
 {
@@ -2228,6 +2286,7 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "pinned", "pins")) { pinned_typed(); return 0; }
     if (is_cmd(cmd, "search", "find")) { search_open(); return 0; }
     if (strcmp(cmd, "motd") == 0) { motd_typed(rest); return 0; }
+    if (strcmp(cmd, "mode") == 0) { mode_typed(rest); return 0; }
     if (strcmp(cmd, "emoji") == 0 && *rest == '\0') { emoji_show(); return 0; }   /* commands/emoji.ts: no query opens the picker */
     if (strcmp(cmd, "emoji") == 0) { emoji_search_typed(rest); return 0; }
     if (strcmp(cmd, "emojis") == 0) { emojis_typed(rest); return 0; }
@@ -2673,7 +2732,7 @@ static int handle_mouse(void)
             if (hit == LC_HIT_NO) M.modal = LC_MODAL_NONE;
             continue;
         }
-        if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) M.modal = LC_MODAL_NONE; continue; }
+        if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) modal_close(); continue; }
         if (M.settings) {                       /* a click on an item picks it, as Space does */
             if (hit == LC_HIT_SETTINGS_ROW) settings_pick(idx);
             continue;
@@ -2838,7 +2897,7 @@ static int handle_key(int key)
     }
     if (M.search) { search_key(key); return 0; }
     if (M.settings) { settings_key(key); return 0; }
-    if (M.modal == LC_MODAL_MESSAGE) { M.modal = LC_MODAL_NONE; return 0; }
+    if (M.modal == LC_MODAL_MESSAGE) { modal_close(); return 0; }
     if (M.modal == LC_MODAL_QUIT) {
         if (key == 'y' || key == 'Y' || is_enter(key)) return 1;
         if (key == 'n' || key == 'N' || key == UI_KEY_ESC) M.modal = LC_MODAL_NONE;

@@ -537,6 +537,25 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         st->room_motd_puts++;
         sprintf(st->pending_row, "room_motd|lobby|Tester||1700000500|0|%s", st->room_motd);
         chat_reply(fd, 200, "application/json", "{\"ok\":true}");
+    } else if (is_post && strncmp(path, "/chat/v1/rooms/", 15) == 0 && strstr(path, "/mode") != 0) {
+        /* POST /rooms/:id/mode: "+z" is refused (a non-moderator); an 'x' flag is unknown; the rest apply */
+        char modes[72], params[160], applied[260], reply[400];
+        chat_note_write(st, path, body);
+        chat_copy_json_field(modes, sizeof modes, body, "modes");
+        chat_copy_json_field(params, sizeof params, body, "params");
+        st->mode_calls++;
+        if (strcmp(modes, "+z") == 0) {
+            chat_reply(fd, 403, "application/json", "{\"error\":\"forbidden\",\"detail\":\"Only moderators can change modes\"}");
+            return;
+        }
+        if (strchr(modes, 'x') != 0) {
+            chat_reply(fd, 200, "application/json", "{\"applied\":\"+m\",\"errors\":\"Unknown mode flag: x|User nobody@UPROUGH not found\"}");
+            return;
+        }
+        sprintf(applied, "%s%s%s", modes, params[0] ? " " : "", params);
+        sprintf(st->pending_row, "mode|lobby|Tester||1700000500|0|%s", applied);
+        sprintf(reply, "{\"applied\":\"%s\",\"errors\":\"\"}", applied);
+        chat_reply(fd, 200, "application/json", reply);
     } else if (strcmp(method, "PUT") == 0 && strstr(path, "/topic") != 0) {
         char topic[200];
         chat_note_write(st, path, body);

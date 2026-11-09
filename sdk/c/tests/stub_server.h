@@ -104,6 +104,7 @@ typedef struct {
     char emoji_body[120];                  /* body of the latest PUT /emoji/:name */
     char room_motd[128];                   /* the room's motd: PUT /rooms/:id/motd sets it, the join reply carries it */
     volatile int room_motd_puts;
+    volatile int mode_calls;               /* POST /rooms/:id/mode */
     char last_write_path[128];             /* path of the latest edit, delete, topic, moderation or invite call */
     char last_write_body[300];             /* its JSON body ("" for DELETE) */
     char last_dm_peer[64];

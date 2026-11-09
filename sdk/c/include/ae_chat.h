@@ -159,6 +159,12 @@ int ae_chat_topic(ae_chat *c, const char *room, const char *topic);
 /** PUT /rooms/:id/motd {motd}: the room's message of the day (TS /motd). An empty motd clears it. Owner or moderator only. */
 int ae_chat_room_motd(ae_chat *c, const char *room, const char *motd);
 
+/** POST /rooms/:id/mode {modes, params} (TS /mode): staff apply a mode string such as "+mv" with
+ * space-separated params. `applied` gets what took effect ("+m +v bob@BOARD"), `errors` the
+ * per-flag refusals joined by '|'. Either may be NULL. */
+int ae_chat_mode(ae_chat *c, const char *room, const char *modes, const char *params,
+                 char *applied, int applied_cap, char *errors, int errors_cap);
+
 /** POST /rooms/:id/<action> {user, reason?, minutes?}. action: kick, ban, unban, mute, unmute, op, deop.
  *  user is handle@BOARD. reason may be NULL or ""; minutes (mute only) 0 means until unmuted. */
 int ae_chat_moderate(ae_chat *c, const char *room, const char *action, const char *user,

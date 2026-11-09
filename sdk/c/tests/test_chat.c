@@ -739,8 +739,27 @@ static void test_door_phase_a(void)
     assert(has_line(0, "Unknown event type: bogus") && has_line(0, "All BBS events enabled"));
     assert(has_line(0, "Error: Usage: /delete #channel") && has_line(0, "Not found."));
     assert(st->room_admin_calls == 1 && strstr(st->last_write_path, "/rooms/secret") != 0);
+    /* /mode (TS commands/mode.ts + room:mode + room:error): usage, the sign check, the hub call with
+       qualified params, the accentAlt event line, and one error modal per refusal, in turn. */
+    drive(KEYS("\r" "/mode\r" "/mode i\r" "/mode +mo @alice\r"), 0);
+    assert(has_line(0, "Error: Usage: /mode <+modes> [param]  e.g. /mode +i  or /mode +o alice"));
+    assert(has_line(0, "Error: Mode string must start with + or -"));
+    assert(st->mode_calls == 1 && strstr(st->last_write_path, "/rooms/lobby/mode") != 0);
+    assert(strcmp(st->last_write_body, "{\"modes\":\"+mo\",\"params\":\"alice\"}") == 0);
+    for (i = 0; i < M.nlines; i++)
+        if (strstr(M.lines[i].text, "[Tester] set mode +mo alice") != 0) { assert(M.lines[i].tone == LC_ACTIVITY); found++; }
+    assert(found == 1);
+    found = 0;
+    drive(KEYS("\r" "/mode +mx nobody\r"), 0);
+    assert(M.modal == LC_MODAL_MESSAGE && strcmp(M.modal_text, "Unknown mode flag: x") == 0);
+    drive(KEYS("\r" "/mode +mx nobody\r" "\r"), 0);           /* closing the first shows the next */
+    assert(M.modal == LC_MODAL_MESSAGE && strcmp(M.modal_text, "User nobody@UPROUGH not found") == 0);
+    drive(KEYS("\r" "/mode +mx nobody\r" "\r" "\r"), 0);
+    assert(M.modal != LC_MODAL_MESSAGE);
+    drive(KEYS("\r" "/mode +z\r"), 0);
+    assert(M.modal == LC_MODAL_MESSAGE && strcmp(M.modal_text, "Only moderators can change modes") == 0);
+    printf("  [OK] door: /mode sends the hub mode call, shows the set-mode line and each refusal in turn\n");
     stop_stub();
-    printf("  [OK] door: /me /pin /unpin /search /motd /customemoji /events /delete reach the server and print the TS texts\n");
 
     start_stub();
     drive(KEYS("\r" "/pinned\r"), 0);

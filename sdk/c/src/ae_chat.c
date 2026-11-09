@@ -706,6 +706,29 @@ int ae_chat_room_motd(ae_chat *c, const char *room, const char *motd)
     return call(c, "PUT", path, body, (unsigned long)at);
 }
 
+int ae_chat_mode(ae_chat *c, const char *room, const char *modes, const char *params,
+                 char *applied, int applied_cap, char *errors, int errors_cap)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    long at;
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/mode");
+
+    if (applied != 0 && applied_cap > 0) applied[0] = '\0';
+    if (errors != 0 && errors_cap > 0) errors[0] = '\0';
+    if (rc != AE_CHAT_OK) return rc;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "modes", modes ? modes : "");
+    if (at >= 0) at = put_field(body, sizeof body, at, "params", params ? params : "");
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    rc = call(c, "POST", path, body, (unsigned long)at);
+    if (rc == AE_CHAT_OK) {
+        if (applied != 0 && applied_cap > 0 && json_extract_string(c->reply, "applied", applied, (unsigned long)applied_cap) != 0) applied[0] = '\0';
+        if (errors != 0 && errors_cap > 0 && json_extract_string(c->reply, "errors", errors, (unsigned long)errors_cap) != 0) errors[0] = '\0';
+    }
+    return rc;
+}
+
 int ae_chat_moderate(ae_chat *c, const char *room, const char *action, const char *user,
                      const char *reason, int minutes)
 {
