@@ -248,6 +248,10 @@ export class ChatClient {
   post(sid: string, roomId: string, content: string, clientId: string): Promise<ChatPostReply> {
     return this.json('POST', `/rooms/${encodeURIComponent(roomId)}/messages`, sid, { content, clientId });
   }
+  /** The caller's whole input buffer in a room; '' = stopped typing. */
+  async typing(sid: string, roomId: string, text: string): Promise<void> {
+    await this.json('POST', `/rooms/${encodeURIComponent(roomId)}/typing`, sid, { text });
+  }
   edit(sid: string, messageId: string, content: string) {
     return this.json<{ id: string; seq: number }>('PUT', `/messages/${encodeURIComponent(messageId)}`, sid, {
       content,

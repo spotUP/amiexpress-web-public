@@ -62,10 +62,11 @@ export async function startChatStub(): Promise<ChatStub> {
       if (p === '/rooms.txt') return text('ROOMS|1|1|1\r\nroom1|Lobby|Hello|public|1|sysop@TEST\r\n');
       if (req.method === 'POST' && p === '/rooms') { const b = JSON.parse(Buffer.concat(chunks).toString() || '{}'); return json(201, { id: 'room9', name: b.name, visibility: b.visibility ?? 'public', kind: b.kind ?? 'text' }); }
       if (req.method === 'POST' && /^\/rooms\/[^/]+\/join$/.test(p)) return json(200, { id: 'room1', name: 'Lobby', topic: 'Hello', members: 1, ops: [], since: 0 });
+      if (req.method === 'POST' && /^\/rooms\/[^/]+\/typing$/.test(p)) return json(200, { ok: true });
       if (/\/history\.txt$/.test(p)) return text('HISTORY|1|0|0\r\n');
       if (req.method === 'POST' && /^\/rooms\/[^/]+\/messages$/.test(p)) return json(200, { id: 'm1', seq: 1, at: 1 });
       if (p === '/events.txt') {
-        const send = () => { const rows = queue.splice(0); text(`EVENTS|1|${seq}|${rows.length}\r\n${rows.map((r) => `${r}\r\n`).join('')}`); };
+        const send = () => { if (res.writableEnded) return; const rows = queue.splice(0); text(`EVENTS|1|${seq}|${rows.length}\r\n${rows.map((r) => `${r}\r\n`).join('')}`); };
         if (queue.length > 0) return send();
         const t = setTimeout(send, 400);
         waiting.push(() => { clearTimeout(t); send(); });

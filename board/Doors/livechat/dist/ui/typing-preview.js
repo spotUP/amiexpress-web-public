@@ -4,6 +4,7 @@ exports.TYPING_STALE_MS = exports.TYPING_HEIGHT = void 0;
 exports.createTypingPreview = createTypingPreview;
 exports.isAnyoneTyping = isAnyoneTyping;
 exports.renderTypingPreview = renderTypingPreview;
+exports.setTypingBuffer = setTypingBuffer;
 exports.processKeystroke = processKeystroke;
 const theme_1 = require("./theme");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
@@ -67,6 +68,17 @@ function renderTypingPreview(buffers) {
     }
     // Return all typing users on one line, separated by spaces
     return parts.length > 0 ? parts.slice(0, 3).join('  ') : '';
+}
+/**
+ * Set a typer's whole buffer at once (hub `typing` event: the sender's full
+ * input text). An empty text means the typer stopped, so the buffer goes.
+ */
+function setTypingBuffer(buffers, userId, username, text, userColor) {
+    if (text.length === 0) {
+        buffers.delete(userId);
+        return;
+    }
+    buffers.set(userId, { username, buffer: text, lastUpdate: Date.now(), color: userColor });
 }
 /** Process keystroke for typing buffer */
 function processKeystroke(buffers, userId, username, char, userColor) {

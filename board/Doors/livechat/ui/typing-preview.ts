@@ -81,6 +81,24 @@ export function renderTypingPreview(buffers: Map<number, TypingBuffer>): string 
   return parts.length > 0 ? parts.slice(0, 3).join('  ') : '';
 }
 
+/**
+ * Set a typer's whole buffer at once (hub `typing` event: the sender's full
+ * input text). An empty text means the typer stopped, so the buffer goes.
+ */
+export function setTypingBuffer(
+  buffers: Map<number, TypingBuffer>,
+  userId: number,
+  username: string,
+  text: string,
+  userColor: string
+): void {
+  if (text.length === 0) {
+    buffers.delete(userId);
+    return;
+  }
+  buffers.set(userId, { username, buffer: text, lastUpdate: Date.now(), color: userColor });
+}
+
 /** Process keystroke for typing buffer */
 export function processKeystroke(
   buffers: Map<number, TypingBuffer>,

@@ -10,6 +10,7 @@ import { db } from "../database";
 import { getSessionBySocketId, getSocketIdByUserId } from "./session-manager";
 import { sendChatMessage, acceptChat } from "../handlers/chat/chat.handler";
 import { onCaller } from "./socket-guard";
+import { relayFederatedTyping } from "../services/chat-federation/chat-session-bridge";
 
 /**
  * Register chat socket event handlers
@@ -406,6 +407,8 @@ console.log("[BACKEND] Skipping keystroke - no session or room");
         return;
       }
 
+      relayFederatedTyping(session, "keystroke", data.char);
+
       // Broadcast keystroke to other users in the same room (not back to sender)
       const socketRoom = "room:" + session.currentRoomId;
 console.log("[BACKEND] Broadcasting to room:", socketRoom);
@@ -424,6 +427,8 @@ console.log("[BACKEND] Broadcasting to room:", socketRoom);
       const session = getSessionBySocketId(socket.id);
       if (!session || !session.currentRoomId) return;
 
+      relayFederatedTyping(session, "submit");
+
       // Notify other users that this user submitted their message (stopped typing)
       const socketRoom = "room:" + session.currentRoomId;
       socket.to(socketRoom).emit("chat:keystroke-submit", {
@@ -439,6 +444,8 @@ console.log("[BACKEND] Broadcasting to room:", socketRoom);
     (_caller: BBSSession, data: { channelId: string; userId: number }) => {
       const session = getSessionBySocketId(socket.id);
       if (!session || !session.currentRoomId) return;
+
+      relayFederatedTyping(session, "clear");
 
       // Notify other users that this user cleared their input
       const socketRoom = "room:" + session.currentRoomId;

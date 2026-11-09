@@ -28,5 +28,10 @@ export declare const TYPING_STALE_MS = 5000;
 export declare function isAnyoneTyping(buffers: Map<number, TypingBuffer>, now?: number): boolean;
 /** Render typing preview content - shows other users typing in real-time */
 export declare function renderTypingPreview(buffers: Map<number, TypingBuffer>): string;
+/**
+ * Set a typer's whole buffer at once (hub `typing` event: the sender's full
+ * input text). An empty text means the typer stopped, so the buffer goes.
+ */
+export declare function setTypingBuffer(buffers: Map<number, TypingBuffer>, userId: number, username: string, text: string, userColor: string): void;
 /** Process keystroke for typing buffer */
 export declare function processKeystroke(buffers: Map<number, TypingBuffer>, userId: number, username: string, char: string, userColor: string): void;

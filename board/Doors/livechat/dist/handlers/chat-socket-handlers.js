@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupChatHandlers = setupChatHandlers;
+const typing_preview_1 = require("../ui/typing-preview");
 const mute_list_1 = require("../core/mute-list");
 const reply_quote_1 = require("../core/reply-quote");
 const prefs_sync_1 = require("../core/prefs-sync");
@@ -20,6 +21,15 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         if (String(d.userId) === String(uid))
             return; // Skip own keystrokes
         pk(st.typingBuffers, d.userId, d.username, d.char, guc(d.username));
+        utp();
+    });
+    // Whole-buffer typing from the hub (other boards): one call sets the preview.
+    sock.on('chat:typing', (d) => {
+        if (d.channelId !== st.currentChannel)
+            return;
+        if (String(d.userId) === String(uid))
+            return; // Skip own typing
+        (0, typing_preview_1.setTypingBuffer)(st.typingBuffers, d.userId, d.username, String(d.text ?? ''), guc(d.username));
         utp();
     });
     sock.on('chat:keystroke-submit', (d) => {

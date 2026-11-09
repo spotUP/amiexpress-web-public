@@ -76,6 +76,11 @@ interface CallerState {
   polling: boolean;
   closed: boolean;
   counter: number;
+  /** The caller's input buffer as the hub should see it (typing indicator). */
+  typingText: string;
+  typingSent: string;
+  typingLastAt: number;
+  typingTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const states = new WeakMap<BBSSession, CallerState>();
@@ -107,6 +112,10 @@ async function stateFor(session: BBSSession): Promise<CallerState> {
       polling: false,
       closed: false,
       counter: 0,
+      typingText: '',
+      typingSent: '',
+      typingLastAt: 0,
+      typingTimer: null,
     };
     states.set(session, st);
     open.add(st);
@@ -158,6 +167,14 @@ function deliver(session: BBSSession, st: CallerState, rows: ChatTextReply['rows
         roleColor: r.roleColor,
         createdAt: new Date(toMs(at)),
       });
+      continue;
+    }
+    if (r.type === 'typing') {
+      // A bridged session on this board already showed it through the local
+      // keystroke relay; only other boards' typers come through the hub.
+      const isLocal = [...open].some((o) => o.handle.toLowerCase() === r.user.toLowerCase());
+      if (isLocal) continue;
+      emitter.emit('chat:typing', { channelId: r.room, userId: r.user, username: r.user, text: r.text });
       continue;
     }
     if (r.type === 'presence') {
@@ -237,11 +254,51 @@ async function pollLoop(session: BBSSession, st: CallerState): Promise<void> {
   }
 }
 
+/** Sender throttle for typing snapshots (leading and trailing edge). */
+export const TYPING_THROTTLE_MS = 400;
+
+function sendTyping(st: CallerState): void {
+  st.typingTimer = null;
+  if (!st.roomId || st.typingText === st.typingSent) return;
+  const room = st.roomId;
+  const text = st.typingText;
+  st.typingSent = text;
+  st.typingLastAt = Date.now();
+  st.client.typing(st.sid as string, room, text).catch(() => undefined);
+}
+
+/**
+ * Mirror the local keystroke relay to the hub: keep the caller's input buffer
+ * and POST throttled snapshots; submit/clear send the final "" at once.
+ * No-op when federation is off or the caller has no hub session in a room.
+ */
+export function relayFederatedTyping(session: BBSSession, kind: 'keystroke' | 'submit' | 'clear', char = ''): void {
+  if (!isFederatedEnabled()) return;
+  const st = states.get(session);
+  if (!st || !st.sid || !st.roomId || st.closed) return;
+  if (kind === 'keystroke') {
+    st.typingText = char === 'BACKSPACE' ? st.typingText.slice(0, -1) : st.typingText + char;
+  } else {
+    st.typingText = '';
+  }
+  if (st.typingTimer) {
+    if (kind !== 'keystroke') {
+      clearTimeout(st.typingTimer);
+      sendTyping(st);
+    }
+    return;
+  }
+  const wait = st.typingLastAt + TYPING_THROTTLE_MS - Date.now();
+  if (kind !== 'keystroke' || wait <= 0) sendTyping(st);
+  else st.typingTimer = setTimeout(() => sendTyping(st), wait);
+}
+
 /** End a caller's chat session (logoff, disconnect). Safe to call when none exists. */
 export async function closeFederatedChat(session: BBSSession): Promise<void> {
   const st = states.get(session);
   if (!st) return;
   st.closed = true;
+  if (st.typingTimer) clearTimeout(st.typingTimer);
   open.delete(st);
   states.delete(session);
   const sid = st.sid;

@@ -1,3 +1,4 @@
+import { setTypingBuffer } from '../ui/typing-preview';
 import { hidesRoomMessages, hidesDirectMessages, applyServerIgnores } from '../core/mute-list';
 import { formatReplyQuote } from '../core/reply-quote';
 import { applyServerPrefs } from '../core/prefs-sync';
@@ -17,6 +18,14 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     if (d.channelId !== st.currentChannel) return;
     if (String(d.userId) === String(uid)) return;  // Skip own keystrokes
     pk(st.typingBuffers, d.userId, d.username, d.char, guc(d.username));
+    utp();
+  });
+
+  // Whole-buffer typing from the hub (other boards): one call sets the preview.
+  sock.on('chat:typing', (d: any) => {
+    if (d.channelId !== st.currentChannel) return;
+    if (String(d.userId) === String(uid)) return;  // Skip own typing
+    setTypingBuffer(st.typingBuffers, d.userId, d.username, String(d.text ?? ''), guc(d.username));
     utp();
   });
 
