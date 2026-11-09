@@ -11,6 +11,7 @@ import { changeAccount } from '../services/account.service';
 import { keysForLog } from '../utils/keys-for-log.util';
 import { loggableCommandParams } from './commands/menu-door-exit';
 import { BBSSession } from '../index';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import { BBSState, LoggedOnSubState, displayFlowStates, isDisplayFlowState } from '../constants/bbs-states';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../constants/command-results';
@@ -467,12 +468,47 @@ console.error('[pauseDisplayFlow] Error during pause:', error);
  * them off the serial buffer (28583-28620); nothing purges it in between.
  */
 export async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
+  /*
+   * ONE LOGON FLOW PER SESSION AT A TIME.
+   *
+   * express.e walks the logon screens as one procedure; nothing can step it
+   * twice. Here every key that lands in a display-flow state calls this, so a
+   * RETURN typed ahead during the login pauses arrived while a step was still
+   * awaiting - CONF_SCAN's `displayScreen('MAILSCAN')`, whose `~CC_TIPLOGIN`
+   * runs the tip door - and drew MAILSCAN and started the door a second time
+   * (live, 2026-11-09: two "Starting TypeScript door: TIPLOGIN" 44 ms apart).
+   * The caller's next key went to the second door; the first sat out its
+   * 30 s timeout with the flow waiting on it: "any key to continue doesnt
+   * work".
+   *
+   * A step may still advance the flow from inside itself (continueJoinAfterBull
+   * from the rejoin), so ownership is the async chain, not a flag: a call made
+   * inside a running step goes on; a call from another chain (another key)
+   * stands down, and the running step carries the flow to its next prompt.
+   */
+  const running = displayFlowDepth.get(session) ?? 0;
+  if (running > 0 && displayFlowOwner.getStore() !== session) {
+    displayFlowLog('a step is already running; not advancing', `state=${session.subState}`);
+    // The running step may be waiting on a typed line (the conference scan's
+    // prompts): hand it the line, as the finally below does for a step that ran.
+    readLineAhead(socket, session);
+    return;
+  }
+  displayFlowDepth.set(session, running + 1);
   try {
-    await stepDisplayFlow(socket, session);
+    await displayFlowOwner.run(session, () => stepDisplayFlow(socket, session));
   } finally {
+    const left = (displayFlowDepth.get(session) ?? 1) - 1;
+    if (left > 0) displayFlowDepth.set(session, left);
+    else displayFlowDepth.delete(session);
     readLineAhead(socket, session);
   }
 }
+
+/** Steps of the logon flow in progress, per session (see advanceDisplayFlow). */
+const displayFlowDepth = new WeakMap<BBSSession, number>();
+/** The async chain that owns the running step (see advanceDisplayFlow). */
+const displayFlowOwner = new AsyncLocalStorage<BBSSession>();
 
 async function stepDisplayFlow(socket: any, session: BBSSession): Promise<void> {
   /*
