@@ -46,7 +46,7 @@ describe('achievements configuration', () => {
   it('a board with no server url or key has achievements off, and a set key is stored encrypted', () => {
     expect(achievementsSettings(repo.getSystemConfig())).toEqual({ serverUrl: '', boardKey: '', boardId: '', enabled: false });
 
-    repo.updateSystemConfig({ achievements_server_url: 'https://doors.uprough.net/', achievements_board_key: 'REDACTED' });
+    repo.updateSystemConfig({ achievements_server_url: 'https://doors.uprough.net/', achievements_board_key: 'uprough.fake-board-key' });
 
     const raw = rawDb.prepare('SELECT achievements_board_key AS k FROM system_config WHERE id = 1').get() as { k: string };
     expect(raw.k).not.toContain('s3cret');
@@ -56,7 +56,7 @@ describe('achievements configuration', () => {
     expect(isDatabaseOnlyField('achievements_disabled')).toBe(true);
     // The read path decrypts, and the trailing slash is gone.
     expect(achievementsSettings(repo.getSystemConfig())).toEqual({
-      serverUrl: 'https://doors.uprough.net', boardKey: 'REDACTED', boardId: 'uprough', enabled: true,
+      serverUrl: 'https://doors.uprough.net', boardKey: 'uprough.fake-board-key', boardId: 'uprough', enabled: true,
     });
   });
 
@@ -74,7 +74,7 @@ describe('achievements configuration', () => {
     // The address field's placeholder was the only place that string
     // appeared, and a sysop read it as a value: the key saved, the address
     // did not, and the door said the board was not configured (2026-09-07).
-    repo.updateSystemConfig({ achievements_board_key: 'REDACTED' });
+    repo.updateSystemConfig({ achievements_board_key: 'uprough.fake-board-key' });
     const s = achievementsSettings(repo.getSystemConfig());
     expect(s.serverUrl).toBe(DEFAULT_ACHIEVEMENTS_SERVER);
     expect(s.enabled).toBe(true);

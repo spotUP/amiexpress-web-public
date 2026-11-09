@@ -114,7 +114,7 @@ const C64_VALUE_TOOLTYPES: Array<{ key: string; label: string; help: string; pla
     placeholder: 'blank = 80',
   },
   {
-    key: 'REDACTED',
+    key: 'C64_MARKER_COLUMNS',
     label: 'Marker columns',
     help: "How many columns this door's list markers occupy, so the adapter keeps a marked list's left edge still.",
     placeholder: 'blank = auto',

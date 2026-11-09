@@ -261,7 +261,7 @@ const REAL_SCREENS = ['Screens/Conf/Menu.txt'];
  * both are literally what it substitutes.
  */
 function parsedScreen(file: string): string {
-  const decoded = readAmigaTextFileWithTransforms(path.join(REPO_ROOT, file)).text;
+  const decoded = readAmigaTextFileWithTransforms(path.join(REPO_ROOT, 'board', file)).text;
   const stripped = parseWipeMCI(decoded).content;
   const expanded = stripped.replace(/~f\r?\n?/g, '\x1b[2J\x1b[H').replace(/~N/g, 'Sysop');
   return addAnsiEscapes(expanded).replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');

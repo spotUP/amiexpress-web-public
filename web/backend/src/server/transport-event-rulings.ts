@@ -1,5 +1,5 @@
 /**
- * THE RULING TABLE - 245 event names, each with a written reason.
+ * THE RULING TABLE - 249 event names, each with a written reason.
  *
  * Split out of `server/transport-adapter.ts` for the repo's 2000-line ceiling
  * (`.husky` pre-commit size check): the adapter is BEHAVIOUR, this file is the
@@ -329,6 +329,38 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "(Doors/livechat/handlers/chat-socket-handlers.ts). A byte terminal cannot " +
     "render a structured object; the ignore itself is enforced in the room " +
     "broadcast and DM delivery, so it holds on every transport.",
+  },
+  "chat:presence": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "services/chat-federation/chat-session-bridge.ts (presence relay) and the door's own status commands. Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts). A byte terminal cannot " +
+    "render a structured object; the status itself is stored on the server and shown in the member list on every transport.",
+  },
+  "chat:typing": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "services/chat-federation/chat-session-bridge.ts (typing relay). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts). A byte terminal cannot " +
+    "render a structured object; a typing indicator is transient and has no stored form, so a byte terminal shows none.",
+  },
+  "chat:whois": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "the LiveChat door (Doors/livechat/server.ts and handlers/input-submit-handler.ts) as the request for a profile. Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts). A byte terminal cannot " +
+    "render a structured object; the reply, chat:profile, is the structured half; the door renders the profile as text on its own side.",
+  },
+  "chat:profile": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "services/chat-federation/chat-session-bridge.ts (reply to chat:whois). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts). A byte terminal cannot " +
+    "render a structured object; the door renders the profile as text on its own side, so a telnet caller still sees it.",
   },
   "chat:prefs": {
     kind: "web-only",

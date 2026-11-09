@@ -53,7 +53,7 @@ export const STEPS: Record<string, Step> = {
     MULTINODE: 'NO',
     STACK: '50000',
     C64_ADAPT: '40',
-    REDACTED: '1',
+    C64_MARKER_COLUMNS: '1',
   }, force),
   // The main menu (M19): the board's MENU command is this door. MENUSETTINGS is the
   // same binary under the W settings registration (the door tells them apart with
@@ -120,7 +120,7 @@ export const STEPS: Record<string, Step> = {
       MIN_COLUMNS: '40',
       MULTINODE: 'YES',
       STACK: '8192',
-    }), { removeKeys: (k) => k === 'C64_ADAPT' || k === 'REDACTED' });
+    }), { removeKeys: (k) => k === 'C64_ADAPT' || k === 'C64_MARKER_COLUMNS' });
     return infoPath;
   },
 };

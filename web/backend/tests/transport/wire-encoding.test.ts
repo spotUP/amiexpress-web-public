@@ -115,20 +115,13 @@ import { readAmigaTextFile, stripSauceMetadata } from '../../src/utils/amiga-tex
 import * as outputUtil from '../../src/utils/output.util';
 import type { BBSSession } from '../../src/index';
 
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
 /*
- * The TRACKED copy of the title screen, not `Screens/BBSTITLE.txt`.
- *
- * This pin needs the real screen and refuses to skip, which is right - but
- * `Screens/BBSTITLE.txt` is NOT tracked by git. It is on this disk because
- * this checkout IS the sysop's live board, so the assertion could only ever
- * throw in CI, and it went red here the moment the sysop replaced his local
- * screens from the live board (2026-09-16). The forty-one `Node<n>` copies
- * ARE tracked and carry the same art - this file's own restore instructions
- * above say so - so the pin reads one of those and means the same thing
- * everywhere.
+ * A synthetic title screen of the same shape as a real node title: Latin-1
+ * art with 240 high bytes, 68 bare LFs, no CR, and a trailing SUB plus SAUCE
+ * record. It is a committed fixture so the pin measures the encoder on every
+ * checkout, whatever the board's own Node<n> screens hold.
  */
-const BBSTITLE = path.join(REPO_ROOT, 'board', 'Node1', 'BBSTITLE.txt');
+const BBSTITLE = path.join(__dirname, '..', 'fixtures', 'screens', 'BBSTITLE.txt');
 
 const tempDirs: string[] = [];
 

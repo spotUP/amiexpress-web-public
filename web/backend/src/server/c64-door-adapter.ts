@@ -152,7 +152,7 @@ export interface AdapterSession {
 }
 
 export interface C64AdapterOptions {
-  /** REDACTED: room reserved for a list's selection marker. */
+  /** C64_MARKER_COLUMNS: room reserved for a list's selection marker. */
   markerColumns?: number;
   tickMs?: number;
   maxFrameMs?: number;
@@ -276,7 +276,7 @@ export class C64DoorFrameAdapter {
   private viewportOffset = 0;
   /**
    * What this door has shown about its lists; see AlignMemo in the ladder.
-   * Seeded from `REDACTED` so a door that marks a row reserves the
+   * Seeded from `C64_MARKER_COLUMNS` so a door that marks a row reserves the
    * room from its FIRST frame, before any marker has been drawn.
    */
   private readonly align: AlignMemo = {};
@@ -306,7 +306,7 @@ export class C64DoorFrameAdapter {
     /** C64_DROP_LAST: this door's ranked list may lose its lowest ranks to fit. */
     private readonly dropLast: boolean = false,
     /**
-     * REDACTED: room this door's list needs to the LEFT of its
+     * C64_MARKER_COLUMNS: room this door's list needs to the LEFT of its
      * entries for the marker it draws on the selected row. Reserved from the
      * FIRST frame, because a door draws no marker until the caller moves.
      */

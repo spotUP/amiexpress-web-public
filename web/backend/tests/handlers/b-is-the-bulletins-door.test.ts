@@ -26,7 +26,7 @@ describe('the repo registers B as the bulletins door', () => {
 
   it('drops the C64 frame adapter: the door is native at forty columns', () => {
     expect(tt.has('C64_ADAPT')).toBe(false);
-    expect(tt.has('REDACTED')).toBe(false);
+    expect(tt.has('C64_MARKER_COLUMNS')).toBe(false);
   });
 
   it('keeps the sysop-owned access', () => {
@@ -66,7 +66,7 @@ describe('the bulletins step edits an existing binary B.info in place', () => {
   function oldB(): void {
     fs.writeFileSync(target(), sample);
     applyTooltypes(target(), [
-      ['LOCATION', 'DOORS:EmP_Tools/Bulls'], ['C64_ADAPT', '40'], ['REDACTED', '1'],
+      ['LOCATION', 'DOORS:EmP_Tools/Bulls'], ['C64_ADAPT', '40'], ['C64_MARKER_COLUMNS', '1'],
       ['ACCESS', '7'], ['DESCRIPTION', 'sysop text'],
     ], { removeKeys: k => k === 'FALLBACK' || k === 'MIN_COLUMNS' });
   }
@@ -80,7 +80,7 @@ describe('the bulletins step edits an existing binary B.info in place', () => {
     expect(map.get('FALLBACK')).toBe('BULLS');
     expect(map.get('STACK')).toBe('8192');
     expect(map.has('C64_ADAPT')).toBe(false);
-    expect(map.has('REDACTED')).toBe(false);
+    expect(map.has('C64_MARKER_COLUMNS')).toBe(false);
     expect(map.get('ACCESS')).toBe('7');
     expect(map.get('DESCRIPTION')).toBe('sysop text');
     STEPS.bulletins(root);

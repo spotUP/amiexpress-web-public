@@ -31,7 +31,7 @@ describe('the C64 section offers what the backend actually reads', () => {
   });
 
   it('offers every numeric setting the adapter honours', () => {
-    for (const key of ['C64_ADAPT', 'MIN_COLUMNS', 'REDACTED']) {
+    for (const key of ['C64_ADAPT', 'MIN_COLUMNS', 'C64_MARKER_COLUMNS']) {
       expect(SRC).toContain(`key: '${key}'`);
       expect(UTIL).toContain(`'${key}'`);
     }

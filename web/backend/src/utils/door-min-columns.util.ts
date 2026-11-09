@@ -276,7 +276,7 @@ export function resolveDoorAdaptColumns(door: MinColumnsDoorShape): number | nul
  * How many columns this door's list needs to the LEFT of its entries, for a
  * marker it draws on the selected row.
  *
- * `REDACTED=1`, read exactly where `C64_ADAPT` and the two drop
+ * `C64_MARKER_COLUMNS=1`, read exactly where `C64_ADAPT` and the two drop
  * flags are.
  *
  * WHY A DOOR HAS TO SAY. The ladder gives a marked list one left edge by
@@ -298,9 +298,9 @@ export function doorMarkerColumns(door: MinColumnsDoorShape | null | undefined):
   if (!door) return 0;
   const raw =
     (door as any).c64MarkerColumns ??
-    door.toolTypes?.['REDACTED'] ??
+    door.toolTypes?.['C64_MARKER_COLUMNS'] ??
     (door.doorInfo as any)?.c64MarkerColumns ??
-    door.doorInfo?.toolTypes?.['REDACTED'];
+    door.doorInfo?.toolTypes?.['C64_MARKER_COLUMNS'];
   const n = Number.parseInt(String(raw ?? '').trim(), 10);
   return Number.isFinite(n) && n > 0 && n <= 4 ? n : 0;
 }

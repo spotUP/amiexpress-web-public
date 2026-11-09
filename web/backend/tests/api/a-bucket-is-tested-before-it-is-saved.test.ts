@@ -38,7 +38,7 @@ async function waitForTestDb(): Promise<any> {
   return db;
 }
 
-const SECRET = 'REDACTED';
+const SECRET = 'test-b2-application-key-0000000000';
 const B2_BUCKET = {
   endpoint: 'https://s3.eu-central-003.backblazeb2.com',
   region: 'eu-central-003',

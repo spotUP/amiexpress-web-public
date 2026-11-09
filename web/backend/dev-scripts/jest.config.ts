@@ -62,6 +62,19 @@ module.exports = {
     '^@amiexpress/bbs-door-sdk/teletext/tti-lexer$': '<rootDir>/../../sdk/teletext/tti-lexer.ts',
     '^@amiexpress/bbs-door-sdk/common/run-diff$': '<rootDir>/../../sdk/common/run-diff.ts',
     '^@amiexpress/bbs-door-sdk/engines/graphics/motion-trail$': '<rootDir>/../../sdk/engines/graphics/motion-trail.ts',
+    // Doors under board/Doors import these two through their own
+    // node_modules symlink, which a fresh checkout does not have. Source, so
+    // the suites that load a door run without a per-door npm install.
+    '^@amiexpress/bbs-door-sdk/engines/ui/blessed$': '<rootDir>/../../sdk/engines/ui/blessed/index.ts',
+    '^@amiexpress/bbs-door-sdk/engines/ui/theme$': '<rootDir>/../../sdk/engines/ui/theme/index.ts',
+    '^@amiexpress/bbs-door-sdk/catalog$': '<rootDir>/../../sdk/catalog.ts',
+    '^@amiexpress/bbs-door-sdk/utils/blessed-helpers$': '<rootDir>/../../sdk/utils/blessed-helpers.ts',
+    '^@amiexpress/bbs-door-sdk/utils/terminal-mode$': '<rootDir>/../../sdk/utils/terminal-mode.ts',
+    '^@amiexpress/bbs-door-sdk/teletext/page-search$': '<rootDir>/../../sdk/teletext/page-search.ts',
+    '^@amiexpress/bbs-door-sdk/utils/door-input-manager$': '<rootDir>/../../sdk/utils/door-input-manager.ts',
+    // The package root, for a door that reads one helper from it (Tone is
+    // stubbed below).
+    '^@amiexpress/bbs-door-sdk$': '<rootDir>/../../sdk/index.ts',
     '^@amiexpress/bbs-door-sdk/engines/ui/ansi/eight-pens$': '<rootDir>/../../sdk/engines/ui/ansi/eight-pens.ts',
     // The Amiga file formats a door and the board both read. Source, for the
     // same reason as the rest: a RED/GREEN cycle must not ride on sdk/dist.

@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { subscribeThisBrowser, ROOT_WORKER_URL, urlBase64ToBytes } from '../../../packages/terminal/src/utils/push-subscribe';
 import type { PushEnv, PushSubscriptionLike } from '../../../packages/terminal/src/utils/push-subscribe';
 
-const KEY = 'REDACTED';
+const KEY = 'BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-P0A';
 const sub = (endpoint = 'https://push.example/abc', key: Uint8Array = urlBase64ToBytes(KEY)): PushSubscriptionLike => ({
   toJSON: () => ({ endpoint, keys: { p256dh: 'pp', auth: 'aa' } }),
   options: { applicationServerKey: new Uint8Array(key).buffer as ArrayBuffer },

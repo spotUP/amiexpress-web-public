@@ -398,7 +398,6 @@ describe('renderPetsciiScreen (Task 5)', () => {
   it('a .seq that does NOT open with 0x7E round-trips byte for byte, and still feeds the oracle', async () => {
     // A copy of the old Node1/Screens/BBSTITLE.SEQ, kept as a fixture after
     // the unreachable per-node screen trees were deleted from the repo.
-    const repoRoot = path.resolve(__dirname, '../../../..');
     const art = fs.readFileSync(path.join(__dirname, '../fixtures/petscii/BBSTITLE.SEQ'));
     expect(art.length).toBe(864);
     expect(art[0]).toBe(0x1f);            // NOT 0x7E: art, never MCI
@@ -426,7 +425,7 @@ describe('renderPetsciiScreen (Task 5)', () => {
      * asserted: not gated, no tilde byte to be mistaken for one, and the
      * bytes come back identical.
      */
-    const plain = fs.readFileSync(path.join(repoRoot, 'board', 'Node1/BBSTITLE.SEQ'));
+    const plain = fs.readFileSync(path.join(__dirname, '../fixtures/petscii/BBSTITLE-plain.SEQ'));
     expect(plain.length).toBeGreaterThan(0);
     expect(plain[0]).not.toBe(0x7e);
     expect(plain.filter((b) => b === 0x7e).length).toBe(0);

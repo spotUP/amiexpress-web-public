@@ -128,7 +128,7 @@ describe('MAG across the three screens', () => {
 // V2 + V3: a Magazine/ written by the board's own writer, read through MAG
 // ---------------------------------------------------------------------------
 
-const TOKEN = 'REDACTED';
+const TOKEN = 'ZXQ-SENTINEL-7731';
 const HEADLINE = 'Skaven releases Copper Lights for Amiga';
 
 let root: string;
@@ -281,7 +281,7 @@ describe('MAG: the shipped bundle reads the magazine the board wrote', () => {
     // The footer legitimately says `?: Help`; the panel must hold no `?` of its own,
     // which is what an unmappable glyph (a story's curly quote, a rule) would print.
     expect(lines.slice(1, 23).join('\n')).not.toContain('?');
-    expect(screenText).toContain('REDACTED');
+    expect(screenText).toContain('ZXQ-SENTINEL-7731');
     // The news wire is the row above the footer: one static headline, source first.
     expect(lines[23]).toContain('DEMOZOO.ORG // Skaven');
     expect(lines.filter((l) => l.trim()).length).toBeGreaterThan(8);
