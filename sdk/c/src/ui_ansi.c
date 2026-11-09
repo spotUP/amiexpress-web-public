@@ -392,6 +392,39 @@ void ansi_cursor(ansi_buf *b, int visible)
     put_str(b, visible ? "\033[?25h" : "\033[?25l");
 }
 
+static void put_b64(ansi_buf *b, const unsigned char *in, int n)
+{
+    static const char abc[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    unsigned long v = 0;
+    int i;
+    for (i = 0; i < 3; i++) v = (v << 8) | (i < n ? in[i] : 0);
+    put_char(b, abc[(v >> 18) & 63]);
+    put_char(b, abc[(v >> 12) & 63]);
+    put_char(b, n > 1 ? abc[(v >> 6) & 63] : '=');
+    put_char(b, n > 2 ? abc[v & 63] : '=');
+}
+
+void ansi_clipboard(ansi_buf *b, const char *latin1)
+{
+    unsigned char group[3];
+    int have = 0;
+    const unsigned char *p = (const unsigned char *)latin1;
+    put_str(b, "\033]52;c;");
+    for (; *p; p++) {
+        unsigned char utf[2];
+        int n = 0, i;
+        if (*p < 0x80) utf[n++] = *p;
+        else { utf[n++] = (unsigned char)(0xC0 | (*p >> 6)); utf[n++] = (unsigned char)(0x80 | (*p & 0x3F)); }
+        for (i = 0; i < n; i++) {
+            group[have++] = utf[i];
+            if (have == 3) { put_b64(b, group, 3); have = 0; }
+        }
+    }
+    if (have) put_b64(b, group, have);
+    put_char(b, '\007');
+}
+
 /* DECSC saves the cursor AND the terminal's colour/reverse state; DECRC puts
    all of it back. The colour cache has to follow, or it describes a colour
    the terminal no longer shows: the next ansi_color() asking for the colour

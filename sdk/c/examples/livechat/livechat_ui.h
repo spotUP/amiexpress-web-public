@@ -23,6 +23,7 @@
 #define LC_ALERT      196   /* sysop-only destructive menu items (TS alert colour) */
 #define LC_DIM        240   /* timestamps, system lines, rooms not joined */
 #define LC_ACTIVITY   221   /* activity lines, the emoji button face */
+#define LC_OK         78    /* rooms with unread lines: TS T.ok #57E389 */
 #define LC_BAR_INK    0     /* menu bar labels */
 #define LC_GREY       7     /* label bar text, masthead edges, emoji button border */
 #define LC_LABEL_BG   4     /* chat pane label bar ground */
@@ -92,6 +93,8 @@ typedef struct {
     char status;           /* users: 0 online, 'a' away, 'b' busy, 'd' do not disturb */
     char note[28];         /* users: the status text (the away message) */
     char art;              /* rooms: 1 for an Art room, marked [A] as the TS sidebar does */
+    char open;             /* rooms: expanded, arrow v; TS isExpanded */
+    int unread;            /* rooms: unread count, shown as (n) */
 } lc_side;
 
 enum { LC_FOCUS_INPUT, LC_FOCUS_SIDEBAR, LC_FOCUS_MENU };

@@ -32,9 +32,11 @@ int ae_field_read(int field, char *out, int cap)
 /* Scripted clicks: each MOUSE? answers the next step, worked out from the frame the door drew
  * (the test includes livechat.c, so it reads M and lc_hit). "" ends one wake's drain. */
 enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_PICK, MS_CLICK_TOOLS, MS_CLICK_FILES, MS_CLICK_STATUS_USERS, MS_CLICK_STATUS_CHANNELS,
-       MS_CLICK_USER, MS_CLICK_ITEM, MS_FILL, MS_BAR_PRESS, MS_BAR_DRAG, MS_BAR_RELEASE, MS_BAR_HOVER, MS_CHECK };
-static const char *ms_items[4];                           /* names the MS_CLICK_ITEM steps click, in order */
+       MS_CLICK_USER, MS_CLICK_ITEM, MS_CLICK_ROOM, MS_FILL, MS_BAR_PRESS, MS_BAR_DRAG, MS_BAR_RELEASE, MS_BAR_HOVER, MS_CHECK };
+static const char *ms_items[8];                           /* names the MS_CLICK_ITEM steps click, in order */
 static int ms_item_n;
+static const char *ms_rooms[4];                           /* sidebar rooms the MS_CLICK_ROOM steps right-click, in order */
+static int ms_room_n;
 static const int *mouse_script;
 static int mouse_step, mouse_armed;
 static int ms_bar_top_scroll, ms_bar_mid_scroll;
@@ -87,6 +89,13 @@ static int mouse_reply(char *out)
             if (lc_hit(r, 3, &idx) == LC_HIT_SIDEBAR && M.side[idx].kind == LC_SIDE_USER && strcmp(M.side[idx].label, "alice") == 0)
                 return sprintf(out, "P\t4\t%d\t2", r + 1);
         assert(!"alice not in the sidebar");
+    }
+    if (step == MS_CLICK_ROOM) {                        /* a named room in the sidebar opens the channel menu */
+        const char *want = ms_rooms[ms_room_n++];
+        for (r = 0; r < 25; r++)
+            if (lc_hit(r, 3, &idx) == LC_HIT_SIDEBAR && M.side[idx].kind == LC_SIDE_ROOM && strcmp(M.side[idx].label, want) == 0)
+                return sprintf(out, "P\t4\t%d\t2", r + 1);
+        assert(!"room not in the sidebar");
     }
     if (step == MS_CLICK_ITEM) {                        /* a named entry of the open menu */
         const char *want = ms_items[ms_item_n++];
@@ -1020,6 +1029,68 @@ static void test_door_b4_user_menu(void)
     printf("  [OK] door: user menu View Profile, Whois, Mute and Ignore act, labels flip\n");
 }
 
+/* C5 (TS context-menus.ts): Copy Text puts the line on the clipboard (OSC 52), Mark Unread shows (1)
+ * on the room, Pin Channel lists the room first, Expand/Collapse shuts the active room's user rows,
+ * Archive prints the sysop request line, Block tells the server and Unblock lifts it. */
+static int side_index(const char *label)
+{
+    int i;
+    for (i = 0; i < M.nside; i++) if (M.side[i].kind == LC_SIDE_ROOM && strcmp(M.side[i].label, label) == 0) return i;
+    return -1;
+}
+
+static int side_has_user(const char *label)
+{
+    int i;
+    for (i = 0; i < M.nside; i++) if (M.side[i].kind == LC_SIDE_USER && strcmp(M.side[i].label, label) == 0) return 1;
+    return 0;
+}
+
+static void test_door_c5_context_items(void)
+{
+    static const int script[] = { MS_RMB_MESSAGE, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_RMB_MESSAGE, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_ROOM, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_ROOM, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END };
+    int lobby;
+    start_stub();
+    st->rooms_kinds = 1;
+    ms_items[0] = "Copy Text"; ms_items[1] = "Mark Unread"; ms_items[2] = "Pin Channel"; ms_items[3] = "Archive";
+    ms_items[4] = "Block"; ms_items[5] = "Unblock"; ms_item_n = 0;
+    ms_rooms[0] = "Paint"; ms_rooms[1] = "Paint"; ms_room_n = 0;
+    mouse_script = script; mouse_step = 0;
+    drive(KEYS("\r" "\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e" " "), 0);
+    mouse_script = 0;
+    assert(ms_item_n == 6 && ms_room_n == 2);
+    assert(has_line(0, "Copied to clipboard.") && strstr(screen_text, "\033]52;c;") != 0);
+    assert(has_line(0, "Marked Lobby as unread"));
+    lobby = side_index("Lobby");
+    assert(lobby >= 0 && M.side[lobby].unread == 1);
+    assert(has_line(0, "Pinned Paint") && side_index("Paint") < lobby);      /* the pinned room comes first */
+    assert(has_line(0, "Archive requested for Paint"));
+    assert(M.lines[M.nlines - 1].tone != LC_ALERT);                        /* the last line is Unblock's */
+    assert(st->ignore_adds == 1 && st->ignore_removes == 1);
+    assert(has_line(0, "Blocked alice for you") && has_line(0, "alice is no longer hidden."));
+    stop_stub();
+
+    /* Expand/Collapse on the active room shuts it: arrow > and no user rows; again opens it. */
+    start_stub();
+    {
+        static const int s2[] = { MS_CLICK_ROOM, MS_END, MS_CLICK_ITEM, MS_END };
+        ms_items[0] = "Expand/Collapse"; ms_item_n = 0;
+        ms_rooms[0] = "Lobby"; ms_room_n = 0;
+        mouse_script = s2; mouse_step = 0;
+        drive(KEYS("\r" "\x1e\x1e" " "), 0);
+        mouse_script = 0;
+        lobby = side_index("Lobby");
+        assert(lobby >= 0 && M.side[lobby].open == 0 && !side_has_user("alice"));
+    }
+    stop_stub();
+    printf("  [OK] door: Copy Text, Mark Unread, Pin, Expand/Collapse, Archive and Block from the context menus\n");
+}
+
 /* R1a (sysop 2026-11-08): dragging the chat scrollbar thumb scrolls the chat. A press on the track
  * jumps there, held motion follows, release ends it; a bare hover afterwards does not scroll. */
 static void test_door_scrollbar_drag(void)
@@ -1172,6 +1243,7 @@ int main(void)
     test_door_b4_marks();
     test_door_b4_ignore();
     test_door_b4_user_menu();
+    test_door_c5_context_items();
     test_door_message_formatting();
     test_door_format_picker();
     test_door_emoji_picker();

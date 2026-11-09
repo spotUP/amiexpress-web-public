@@ -614,9 +614,14 @@ static void draw_side_item(ui_cells *c, const lc_side *s, int row, int width, in
     switch (s->kind) {
     case LC_SIDE_HEAD: sprintf(buf, "  \001\314\002%.38s", s->label); break;
     case LC_SIDE_ROOM:
-        if (s->joined) sprintf(buf, "%sv %s %.36s", mark, s->art ? "[A]" : "#", s->label);
-        else sprintf(buf, "%s\001\360> %s %.36s", mark, s->art ? "[A]" : "#", s->label);
+    {   /* TS sidebar-items-builder: active ink, unread ok, else dim; arrow v when expanded; (n) unread */
+        char tail[16] = "";
+        int pen = s->joined ? LC_INK : s->unread > 0 ? LC_OK : LC_DIM;
+        if (s->unread > 0) sprintf(tail, " (%d)", s->unread);
+        sprintf(buf, "%s\001%c%c %s %.36s%s", mark, (char)pen, s->open ? 'v' : '>',
+                s->art ? "[A]" : "#", s->label, tail);
         break;
+    }
     case LC_SIDE_USER: {                   /* TS user-status marks: [*] online, [~] away, [-] do not disturb; [!] busy */
         const char *dot = s->status == 'a' ? "[~]" : s->status == 'b' ? "[!]" : s->status == 'd' ? "[-]" : "[*]";
         if (s->note[0] != '\0') sprintf(buf, "%s  \001\360%s\004 %.20s: %.14s", mark, dot, s->label, s->note);

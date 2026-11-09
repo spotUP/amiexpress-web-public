@@ -275,6 +275,11 @@ void ansi_bar_cells(ansi_buf *b, int row, int col, int count, int colour, char p
 /* Hides/shows the hardware cursor. */
 void ansi_cursor(ansi_buf *b, int visible);
 
+/* Puts `latin1` on the caller's clipboard: OSC 52 (ESC ] 52 ; c ; <base64> BEL),
+ * the text converted to UTF-8 first, as the TypeScript door's osc52Copy sends
+ * it. A terminal without OSC 52 ignores the sequence. */
+void ansi_clipboard(ansi_buf *b, const char *latin1);
+
 /**
  * Save and restore where the TERMINAL's cursor is (DECSC/DECRC, ESC 7 / 8).
  *

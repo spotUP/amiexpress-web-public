@@ -147,6 +147,20 @@ static void a_black_background_is_the_terminal_default(void)
     assert(strcmp(since(&b, mark), "\033[48;2;17;34;51m") == 0);
 }
 
+/* LiveChat Copy Text: OSC 52 carries the text as UTF-8, base64, BEL-ended (TS osc52Copy). */
+static void a_clipboard_is_osc52_utf8_base64(void)
+{
+    ansi_buf b = fresh();
+    ansi_clipboard(&b, "h\351");                           /* Latin-1 "he-acute": UTF-8 68 C3 A9 */
+    assert(strcmp(since(&b, 0), "\033]52;c;aMOp\007") == 0);
+    b = fresh();
+    ansi_clipboard(&b, "ab");                               /* one pad */
+    assert(strcmp(since(&b, 0), "\033]52;c;YWI=\007") == 0);
+    b = fresh();
+    ansi_clipboard(&b, "a");                                /* two pads */
+    assert(strcmp(since(&b, 0), "\033]52;c;YQ==\007") == 0);
+}
+
 int main(void)
 {
     a_bar_without_backgrounds_is_reverse_in_the_bar_colour();
@@ -156,6 +170,7 @@ int main(void)
     a_bold_change_keeps_the_background();
     a_dropped_background_resets();
     a_black_background_is_the_terminal_default();
+    a_clipboard_is_osc52_utf8_base64();
     printf("test_ansi_sgr: ok\n");
     return 0;
 }

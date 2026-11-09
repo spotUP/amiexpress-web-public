@@ -261,6 +261,8 @@ static char ignored[HIDE_MAX][32];      /* nicks (no @BOARD) the caller ignores:
 static int nignored;
 static char muted[HIDE_MAX][32];        /* nicks muted for this run only (TS mute-list): room lines hidden */
 static int nmuted;
+static char blocked[HIDE_MAX][32];      /* nicks blocked (TS mute-list block): hidden everywhere, server-ignored */
+static int nblocked;
 
 /** "alice@BOARD" -> "alice". */
 static void nick_of(char *out, size_t cap, const char *user)
@@ -310,7 +312,8 @@ static int hidden_nick(const char *nick)
     char n[32];
     nick_of(n, sizeof n, nick);
     if (same_nick(n, handle)) return 0;
-    return hide_find(ignored, nignored, n) >= 0 || hide_find(muted, nmuted, n) >= 0;
+    return hide_find(ignored, nignored, n) >= 0 || hide_find(muted, nmuted, n) >= 0
+        || hide_find(blocked, nblocked, n) >= 0;
 }
 
 /** Reads the server's ignore list (IGNORES rows user|at) into the local one. */
@@ -319,7 +322,11 @@ static void load_ignores(void)
     char *f[AE_CHAT_ROW_FIELDS];
     nignored = 0;
     if (ae_chat_ignores(&chat) != AE_CHAT_OK) return;
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 1) hide_add(ignored, &nignored, f[0]);
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 1) {
+        char n[32];
+        nick_of(n, sizeof n, f[0]);
+        if (hide_find(blocked, nblocked, n) < 0) hide_add(ignored, &nignored, n);   /* a block is server-ignored too */
+    }
 }
 
 /** A message, inserted by seq among the messages; one already shown (same id) is not shown twice. */
@@ -374,6 +381,13 @@ static void accent_line(const char *text)
 {
     add_note(LC_SYSTEM, text);
     M.lines[M.nlines - 1].tone = LC_ACCENT;
+}
+
+/** TS addSystemMessage("{alert}text{/alert}"): a system line in the alert colour. */
+static void alert_line(const char *text)
+{
+    add_note(LC_SYSTEM, text);
+    M.lines[M.nlines - 1].tone = LC_ALERT;
 }
 
 /* ---- modals ------------------------------------------------------------- */
@@ -433,6 +447,50 @@ static void present(void)
     ui_screen_flush(&screen);
 }
 
+/* ---- per-room sidebar state: TS expandedChannels, collapsedChannels, pinned channels, unreadCount ---- */
+typedef struct { char id[ROOMS_MAX][48]; int count[ROOMS_MAX]; int n; } id_set;
+static id_set pinned_rooms, expanded_rooms, collapsed_rooms, unread_rooms;
+
+static int idset_find(const id_set *s, const char *id)
+{
+    int i;
+    for (i = 0; i < s->n; i++) if (strcmp(s->id[i], id) == 0) return i;
+    return -1;
+}
+
+static int idset_put(id_set *s, const char *id)
+{
+    int i = idset_find(s, id);
+    if (i >= 0 || s->n == ROOMS_MAX) return i;
+    copy(s->id[s->n], sizeof s->id[0], id);
+    s->count[s->n] = 0;
+    return s->n++;
+}
+
+static void idset_drop(id_set *s, const char *id)
+{
+    int i = idset_find(s, id);
+    if (i < 0) return;
+    for (; i + 1 < s->n; i++) { memcpy(s->id[i], s->id[i + 1], sizeof s->id[0]); s->count[i] = s->count[i + 1]; }
+    s->n--;
+}
+
+static int room_unread(const char *id)
+{
+    int i = idset_find(&unread_rooms, id);
+    return i < 0 ? 0 : unread_rooms.count[i];
+}
+
+/** TS channelsToShow: pinned rooms first, the order kept inside each group. */
+static int room_order(int *ord)
+{
+    int n = 0, i, pass;
+    for (pass = 1; pass >= 0; pass--)
+        for (i = 0; i < rooms_count; i++)
+            if ((idset_find(&pinned_rooms, rooms_id[i]) >= 0) == pass) ord[n++] = i;
+    return n;
+}
+
 /* ---- the sidebar -------------------------------------------------------- */
 
 static void side_add(int kind, int joined, const char *label, const char *id)
@@ -483,7 +541,7 @@ static void load_sidebar(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
     char users[16][24], ustat[16][8], utext[16][28];
-    int nusers = 0, i, j, keep = M.side_sel;
+    int nusers = 0, i, j, k, nord, ord[ROOMS_MAX], keep = M.side_sel;
     if (room_id[0] != '\0' && ae_chat_who(&chat) == AE_CHAT_OK) {
         while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 2) {     /* user|room|sysop|roleColor|idle */
             if (strcmp(f[1], room_id) == 0 && nusers < 16) {
@@ -507,13 +565,21 @@ static void load_sidebar(void)
         return;
     }
     side_add(LC_SIDE_HEAD, 0, "TEXT CHANNELS", "");
-    for (i = 0; i < rooms_count; i++) {
-        int here = strcmp(rooms_id[i], room_id) == 0;
+    nord = room_order(ord);
+    for (k = 0; k < nord; k++) {
+        int here, open;
+        i = ord[k];
+        here = strcmp(rooms_id[i], room_id) == 0;
         /* TS lists Voice rooms under VOICE CHANNELS, a section a telnet caller does not get. */
         if (strcmp(rooms_kind[i], "voice") == 0) continue;
+        /* TS isExpanded: a collapsed room is shut; otherwise the active room or one opened by hand. */
+        open = idset_find(&collapsed_rooms, rooms_id[i]) >= 0 ? 0
+             : (here || idset_find(&expanded_rooms, rooms_id[i]) >= 0);
         side_add(LC_SIDE_ROOM, here, rooms_name[i], rooms_id[i]);
         M.side[M.nside - 1].art = strcmp(rooms_kind[i], "art") == 0;
-        if (here) for (j = 0; j < nusers; j++) side_add_user(users[j], ustat[j], utext[j]);
+        M.side[M.nside - 1].open = (char)open;
+        M.side[M.nside - 1].unread = room_unread(rooms_id[i]);
+        if (here && open) for (j = 0; j < nusers; j++) side_add_user(users[j], ustat[j], utext[j]);
     }
     if (ae_chat_dm_list(&chat) == AE_CHAT_OK) {
         int first = 1;
@@ -895,6 +961,7 @@ static int join_room(const char *id)
     sprintf(line, "Joined #%.40s", room_name);
     add_note(LC_ACTIVITY_LINE, line);
     if (ae_chat_history(&chat, room_id, 0, 30) == AE_CHAT_OK) take_history();
+    idset_drop(&unread_rooms, room_id);            /* the room is read once it is open */
     load_sidebar();
     return AE_CHAT_OK;
 }
@@ -989,12 +1056,12 @@ static void create_typed(const char *text, const char *visibility)
 static void list_rooms(void)
 {
     char line[96];
-    int i, rc = load_rooms();
+    int k, i, ord[ROOMS_MAX], rc = load_rooms();
     if (rc != AE_CHAT_OK) { show_error(rc); return; }
     sprintf(line, "Found %d room%s", rooms_count, rooms_count == 1 ? "" : "s");
     system_line(line);
-    for (i = 0; i < rooms_count; i++) {
-        sprintf(line, "#%.30s (%.40s)", rooms_name[i], rooms_id[i]);
+    for (k = room_order(ord), i = 0; i < k; i++) {
+        sprintf(line, "#%.30s (%.40s)", rooms_name[ord[i]], rooms_id[ord[i]]);
         system_line(line);
     }
     load_sidebar();
@@ -1261,16 +1328,44 @@ static void unignore_typed(const char *rest)
     ignore_set(a, 0);
 }
 
-/** The Mute User / Unmute User menu entry: hides the room lines for this run (TS core/mute-list.ts). */
-static void mute_toggle(const char *nick)
+/* TS core/mute-list.ts: one level per user; mute is this door's, ignore and block the server enforces. */
+enum { LV_NONE, LV_MUTE, LV_IGNORE, LV_BLOCK };
+
+static int level_of(const char *nick)
 {
-    char line[96];
-    if (hide_find(muted, nmuted, nick) >= 0) {
-        hide_remove(muted, &nmuted, nick);
-        sprintf(line, "%.30s is no longer hidden.", nick);
-    } else {
-        hide_add(muted, &nmuted, nick);
-        sprintf(line, "Muted %.30s - their room messages are hidden.", nick);
+    return hide_find(blocked, nblocked, nick) >= 0 ? LV_BLOCK
+         : hide_find(ignored, nignored, nick) >= 0 ? LV_IGNORE
+         : hide_find(muted, nmuted, nick) >= 0 ? LV_MUTE : LV_NONE;
+}
+
+/** The Mute/Ignore/Block menu entries (TS toggleMute): the same level again lifts it. Crossing into or out of
+    ignore/block tells the server, as TS chat:ignore / chat:unignore; the line is TS muteMessage. */
+static void level_toggle(const char *arg, int level)
+{
+    char nick[32], full[64], line[128];
+    int before, now;
+    nick_of(nick, sizeof nick, arg);
+    before = level_of(nick);
+    now = before == level ? LV_NONE : level;
+    if ((before >= LV_IGNORE) != (now >= LV_IGNORE)) {
+        int rc;
+        target_user(arg, full, sizeof full, 0, 0);
+        rc = ae_chat_ignore(&chat, full, now >= LV_IGNORE);
+        if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    }
+    hide_remove(muted, &nmuted, nick);
+    hide_remove(ignored, &nignored, nick);
+    hide_remove(blocked, &nblocked, nick);
+    if (now == LV_MUTE) hide_add(muted, &nmuted, nick);
+    else if (now == LV_IGNORE) hide_add(ignored, &nignored, nick);
+    else if (now == LV_BLOCK) hide_add(blocked, &nblocked, nick);
+    if (now == LV_NONE) sprintf(line, "%.30s is no longer hidden.", nick);
+    else if (now == LV_MUTE) sprintf(line, "Muted %.30s - their room messages are hidden.", nick);
+    else if (now == LV_IGNORE) sprintf(line, "Ignoring %.30s - their messages and DMs are hidden.", nick);
+    else {
+        sprintf(line, "Blocked %.30s for you - they are hidden everywhere, but the server does not yet stop them sending.", nick);
+        alert_line(line);
+        return;
     }
     system_line(line);
 }
@@ -2173,6 +2268,24 @@ static void cycle_focus(int step)
     set_focus(f);
 }
 
+/** TS Copy Text (osc52Copy): the line's words without the canvas style bytes, put on the caller's clipboard.
+    The OSC goes out with the next frame; a terminal without OSC 52 ignores it. */
+static void copy_text(const char *marked)
+{
+    char plain[sizeof M.lines[0].text];
+    int n = 0;
+    for (; *marked != '\0' && n < (int)sizeof plain - 1; marked++) {
+        if (*marked == UI_CELLS_M_FG || *marked == UI_CELLS_M_ATTR || *marked == UI_CELLS_M_WIDE) {
+            if (marked[1] == '\0') break;
+            marked++;                                    /* the marker's argument byte */
+        } else if (*marked == UI_CELLS_M_BOLD || *marked == UI_CELLS_M_PLAIN || *marked == UI_CELLS_M_BASE) {
+            continue;
+        } else plain[n++] = *marked;
+    }
+    plain[n] = '\0';
+    ansi_clipboard(&screen.buf, plain);
+}
+
 /** An item whose wire this board does not have yet: say so instead of doing nothing. */
 static void not_yet(const char *item)
 {
@@ -2194,8 +2307,9 @@ static void ctx_open(int kind, int target, int row, int col)
         char who[32];
         for (n = 0; n < 11; n++) ctx_items[n] = u[n];
         nick_of(who, sizeof who, M.side[target].label);          /* TS muteMenuLabels: the entries say the current state */
-        if (hide_find(muted, nmuted, who) >= 0) ctx_items[8] = "Unmute User";
-        if (hide_find(ignored, nignored, who) >= 0) ctx_items[9] = "Unignore";
+        if (level_of(who) == LV_MUTE) ctx_items[8] = "Unmute User";
+        if (level_of(who) == LV_IGNORE) ctx_items[9] = "Unignore";
+        if (level_of(who) == LV_BLOCK) ctx_items[10] = "Unblock";
         if (is_sysop) { ctx_items[n++] = "---"; alert = 3UL << n; ctx_items[n++] = "Kick User"; ctx_items[n++] = "Ban User"; }
     } else if (kind == LC_CTX_CHAT) {
         static const char *const c[] = { "Reply", "Quote", "React", "---", "Copy Text", "Pin Message", "---",
@@ -2209,8 +2323,9 @@ static void ctx_open(int kind, int target, int row, int col)
     } else {
         static const char *const r[] = { "Join", "Leave", "Info", "Expand/Collapse", "---", "Pin Channel" };
         for (n = 0; n < 6; n++) ctx_items[n] = r[n];
-        if (is_sysop) { ctx_items[n++] = "---"; ctx_items[n++] = "Clear History"; ctx_items[n++] = "Archive";
-                        alert = 1UL << n; ctx_items[n++] = "Delete Channel"; }
+        if (idset_find(&pinned_rooms, M.side[target].id) >= 0) ctx_items[5] = "Unpin Channel";
+        if (is_sysop) { ctx_items[n++] = "---"; ctx_items[n++] = "Clear History";
+                        alert = 3UL << n; ctx_items[n++] = "Archive"; ctx_items[n++] = "Delete Channel"; }
     }
     M.ctx_kind = kind;
     M.ctx_target = target;
@@ -2246,21 +2361,32 @@ static void ctx_run(const char *it)
         } else if (strcmp(it, "Kick User") == 0 || strcmp(it, "Ban User") == 0) {
             char user[64];
             int kick = it[0] == 'K', rc;
-            if (!is_sysop) { system_line("Sysop only."); return; }
+            if (!is_sysop) { alert_line("Sysop only."); return; }
             target_user(nick, user, sizeof user, 0, 0);          /* TS: no prompt, no reason */
             rc = ae_chat_moderate(&chat, room_id, kick ? "kick" : "ban", user, "", 0);
             if (rc != AE_CHAT_OK) { show_error(rc); return; }
             sprintf(buf, "%s requested for %.30s", kick ? "Kick" : "Ban", nick);
-            system_line(buf);
+            alert_line(buf);
         } else if (strcmp(it, "View Profile") == 0) profile_overlay(nick);
         else if (strcmp(it, "Whois") == 0) whois_typed(nick);
-        else if (strcmp(it, "Mute User") == 0 || strcmp(it, "Unmute User") == 0) mute_toggle(nick);
-        else if (strcmp(it, "Ignore") == 0) ignore_set(nick, 1);
-        else if (strcmp(it, "Unignore") == 0) ignore_set(nick, 0);
-        else not_yet(it);                /* Add Note (no doorserver note route), Block (B5) */
+        else if (strcmp(it, "Mute User") == 0 || strcmp(it, "Unmute User") == 0) level_toggle(nick, LV_MUTE);
+        else if (strcmp(it, "Ignore") == 0 || strcmp(it, "Unignore") == 0) level_toggle(nick, LV_IGNORE);
+        else if (strcmp(it, "Block") == 0 || strcmp(it, "Unblock") == 0) level_toggle(nick, LV_BLOCK);
+        else not_yet(it);                /* Add Note (no doorserver note route) */
     } else if (M.ctx_kind == LC_CTX_CHAT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
-        if (!l || l->number == 0) { system_line("Right-click on a message first."); return; }
+        if (strcmp(it, "Mark Unread") == 0) {                   /* TS: acts on the current room, not the line */
+            if (room_id[0] == '\0') { system_line("No channel to mark unread."); return; }
+            {
+                int i = idset_put(&unread_rooms, room_id);
+                if (i >= 0 && unread_rooms.count[i] < 1) unread_rooms.count[i] = 1;   /* TS max(1, unreadCount) */
+            }
+            sprintf(buf, "Marked %.40s as unread", room_name);
+            system_line(buf);
+            load_sidebar();
+            return;
+        }
+        if (!l || l->number == 0) { motd_line("Right-click on a message first."); return; }
         if (strcmp(it, "React") == 0) ctx_open(LC_CTX_REACT, M.ctx_target, M.ctx.top, M.ctx.left);   /* the picker, where the menu was */
         else if (strcmp(it, "Reply") == 0) { sprintf(buf, "/reply %d ", l->number); input_set(buf); }
         else if (strcmp(it, "Quote") == 0) {                          /* TS quoteInputText */
@@ -2272,7 +2398,7 @@ static void ctx_run(const char *it)
         else if (strcmp(it, "Edit") == 0) { sprintf(buf, "/edit %d ", l->number); input_set(buf); }
         else if (strcmp(it, "Delete") == 0) then_poll(ae_chat_delete(&chat, l->id));    /* TS: no confirm */
         else if (strcmp(it, "Pin Message") == 0) { sprintf(buf, "/pin %d", l->number); run_command(buf); }
-        else not_yet(it);                /* Copy Text (OSC 52), Mark Unread */
+        else if (strcmp(it, "Copy Text") == 0) { copy_text(l->text); system_line("Copied to clipboard."); }
     } else if (M.ctx_kind == LC_CTX_KIND) {
         char kind[8];
         int i;
@@ -2292,13 +2418,35 @@ static void ctx_run(const char *it)
         if (strcmp(it, "Join") == 0) join_room(r->id);
         else if (strcmp(it, "Leave") == 0) { if (strcmp(r->id, room_id) == 0) leave_room(); else system_line("You are not in that channel."); }
         else if (strcmp(it, "Info") == 0) { sprintf(buf, "Channel: %.40s", r->label); system_line(buf); }
-        else if (strcmp(it, "Clear History") == 0 || strcmp(it, "Delete Channel") == 0) {     /* TS: sysop only */
-            int clear = it[0] == 'C';
-            if (!is_sysop) system_line("Sysop only.");
-            else if (clear) then_poll(ae_chat_room_clear(&chat, r->id));
-            else { ae_chat_room_delete(&chat, r->id); if (strcmp(r->id, room_id) == 0) leave_room(); load_sidebar(); }
+        else if (strcmp(it, "Expand/Collapse") == 0) {               /* TS onToggleChannelExpand */
+            if (idset_find(&collapsed_rooms, r->id) < 0) { idset_drop(&expanded_rooms, r->id); idset_put(&collapsed_rooms, r->id); }
+            else { idset_drop(&collapsed_rooms, r->id); idset_put(&expanded_rooms, r->id); }
+            load_sidebar();
         }
-        else not_yet(it);                /* Expand/Collapse, Pin, Archive */
+        else if (strcmp(it, "Pin Channel") == 0 || strcmp(it, "Unpin Channel") == 0) {
+            int pin = idset_find(&pinned_rooms, r->id) < 0;
+            sprintf(buf, "%s %.40s", pin ? "Pinned" : "Unpinned", r->label);
+            if (pin) idset_put(&pinned_rooms, r->id); else idset_drop(&pinned_rooms, r->id);
+            accent_line(buf);
+            load_sidebar();
+        }
+        else if (strcmp(it, "Clear History") == 0 || strcmp(it, "Archive") == 0 || strcmp(it, "Delete Channel") == 0) {
+            char label[40];                                          /* TS: sysop only, alert lines */
+            if (!is_sysop) { alert_line("Sysop only."); return; }
+            copy(label, sizeof label, r->label);                     /* the sidebar is rebuilt below */
+            if (it[0] == 'C') {
+                then_poll(ae_chat_room_clear(&chat, r->id));
+                sprintf(buf, "Clear history requested for %.36s", label);
+            } else if (it[0] == 'A') {
+                sprintf(buf, "Archive requested for %.36s", label);  /* TS admin:archive-channel has no server handler */
+            } else {
+                ae_chat_room_delete(&chat, r->id);
+                if (strcmp(r->id, room_id) == 0) leave_room();
+                load_sidebar();
+                sprintf(buf, "Delete requested for %.36s", label);
+            }
+            alert_line(buf);
+        }
     }
 }
 
@@ -2694,7 +2842,8 @@ int main(int argc, char **argv)
     /* A fresh run starts with nothing joined (a host test calls main more than once). */
     idle_ticks = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
     room_id[0] = '\0'; room_name[0] = '\0'; room_topic[0] = '\0'; dm_thread[0] = '\0'; dm_peer[0] = '\0';
-    nignored = 0; nmuted = 0;
+    nignored = 0; nmuted = 0; nblocked = 0;
+    pinned_rooms.n = expanded_rooms.n = collapsed_rooms.n = unread_rooms.n = 0;
     fmt_wait = 0; fmt_seen_a = fmt_seen_b = -1;
 
     if (ae_start(node) != 0) return 20;
