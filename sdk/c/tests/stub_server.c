@@ -700,6 +700,10 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (is_post && strstr(path, "/thread") != 0) {
         st->threads++;
         chat_reply(fd, 200, "application/json", "{\"id\":\"t1\",\"seq\":9}");
+    } else if (is_post && strcmp(path, "/chat/v1/dm-group") == 0) {
+        st->group_dms++;
+        strncpy(st->last_group_body, body, sizeof st->last_group_body - 1);
+        chat_reply(fd, 201, "application/json", "{\"id\":\"g1\",\"seq\":4,\"threadId\":\"dgabc123def456\"}");
     } else if (is_post && strncmp(path, "/chat/v1/dm/", 12) == 0) {
         st->dms++;
         strncpy(st->last_dm_peer, path + 12, sizeof st->last_dm_peer - 1);

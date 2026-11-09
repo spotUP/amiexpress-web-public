@@ -111,6 +111,8 @@ typedef struct {
     char last_write_body[300];             /* its JSON body ("" for DELETE) */
     char last_dm_peer[64];
     char last_dm_text[512];
+    int group_dms;                         /* POST /chat/v1/dm-group */
+    char last_group_body[1024];            /* its raw JSON body */
     char last_created[64];
     char last_created_kind[16];            /* "kind" of the latest POST /rooms, "" when it sent none */
     char last_created_topic[100];          /* its "topic" */

@@ -388,6 +388,17 @@ static void accent_line(const char *text)
     M.lines[M.nlines - 1].tone = LC_ACCENT;
 }
 
+/** TS acm(formatDmLine(d)): "[DM to x]: text" in magenta when sent, "[DM from x]: text" in cyan
+    when received; a group DM says "Group DM". */
+static void dm_line(int sent, int group, const char *who, const char *text)
+{
+    char out[LC_TEXT_MAX + 1];
+    sprintf(out, "[%s%s %.120s]: ", group ? "Group DM" : "DM", sent ? " to" : " from", who);
+    strncat(out, text, sizeof out - strlen(out) - 1);
+    add_note(LC_NOTE, out);
+    M.lines[M.nlines - 1].tone = sent ? LC_DM_SENT : LC_DM_RECEIVED;
+}
+
 /** TS addSystemMessage("{alert}text{/alert}"): a system line in the alert colour. */
 static void alert_line(const char *text)
 {
@@ -935,13 +946,15 @@ static void take_events(void)
         if (strcmp(type, "message") == 0 && in_room) {
             add_message(LC_LIVE, seq, ref, user, f[5], f[7], f[8]);
         } else if (strcmp(type, "dm") == 0) {
-            char want[40];
-            sprintf(want, "dm:%.30s", dm_thread);
-            if (dm_thread[0] != '\0' && strcmp(room, want) == 0) {
+            /* the hub's label column is the bare thread id: "dm<hex>" 1:1, "dg<hex>" group */
+            if (dm_thread[0] != '\0' && strcmp(room, dm_thread) == 0) {
                 add_message(LC_LIVE, seq, ref, user, f[5], f[7], "");
             } else if (strcmp(user, handle) != 0 && !hidden_nick(user)) {
-                sprintf(line, "New direct message from %.24s", user);
-                system_line(line);
+                /* TS chat:dm received: the DM line, then the activity line (group threads are "dg...") */
+                int group = strncmp(room, "dg", 2) == 0;
+                dm_line(0, group, user, f[7]);
+                sprintf(line, "%s from %.24s", group ? "Group DM" : "DM", user);
+                add_note(LC_ACTIVITY_LINE, line);
             }
         } else if ((strcmp(type, "react") == 0 || strcmp(type, "unreact") == 0) && in_room) {
             /* TS chat-socket-handlers chat:reaction: an accent chat line and an activity line */
@@ -2407,16 +2420,29 @@ static int run_command(const char *line)
         if (rc != AE_CHAT_OK) show_error(rc);
         return 0;
     }
-    if (is_cmd(cmd, "d", "dm") || strcmp(cmd, "msg") == 0) {
-        char tid[32];
-        arg_word(rest, a, sizeof a);
-        rest = after_word(rest);
-        if (a[0] == '\0' || *rest == '\0') { system_line("Usage: /msg user text"); return 0; }
-        rc = ae_chat_dm(&chat, a, rest, tid, sizeof tid);
-        if (rc == AE_CHAT_OK) {
-            if (dm_thread[0] != '\0' && strcmp(a, dm_peer) == 0) do_poll();
-            else { char note[64]; sprintf(note, "Direct message sent to %.24s", a); system_line(note); }
-        } else show_error(rc);
+    if (is_cmd(cmd, "msg", "dm") || strcmp(cmd, "pm") == 0 || strcmp(cmd, "d") == 0) {
+        /* TS msgCmd: every leading word that starts with '@' is a target; one target is a DM,
+           two or more a group DM (chat:dm / chat:group-dm). */
+        char targets[10][48], list[200], tid[32];
+        const char *peers[10];
+        int n = 0, i;
+        while (*rest == '@' && n < 10) {
+            arg_word(rest + 1, targets[n], sizeof targets[0]);
+            peers[n] = targets[n];
+            rest = after_word(rest);
+            n++;
+        }
+        if (n == 0 || *rest == '\0') { system_line("Usage: /msg @user [@user2 ...] message"); return 0; }
+        rc = n == 1 ? ae_chat_dm(&chat, peers[0], rest, tid, sizeof tid)
+                    : ae_chat_dm_group(&chat, peers, n, rest, tid, sizeof tid);
+        if (rc != AE_CHAT_OK) { show_error(rc); return 0; }
+        if (n == 1 && dm_thread[0] != '\0' && strcmp(peers[0], dm_peer) == 0) { do_poll(); return 0; }
+        list[0] = '\0';
+        for (i = 0; i < n; i++) {
+            if (i > 0) strcat(list, ", ");
+            strncat(list, targets[i], sizeof list - strlen(list) - 3);
+        }
+        dm_line(1, n > 1, list, rest);
         return 0;
     }
     if (is_cmd(cmd, "whois", "info")) { whois_typed(rest); return 0; }

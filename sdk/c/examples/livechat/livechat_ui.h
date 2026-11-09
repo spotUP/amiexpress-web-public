@@ -48,6 +48,8 @@ enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE, LC_EVENT };
 #define LC_EV_RED        1
 #define LC_EV_BLUE       4
 #define LC_EV_CYAN       6
+#define LC_DM_SENT       5     /* TS formatDmLine magenta-fg: a DM the caller sent */
+#define LC_DM_RECEIVED   6     /* TS formatDmLine cyan-fg: a DM the caller received */
 #define LC_EV_WHITE      7
 #define LC_EV_LIGHTGREEN 10
 

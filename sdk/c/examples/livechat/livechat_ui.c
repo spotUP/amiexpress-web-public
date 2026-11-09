@@ -549,7 +549,7 @@ void lc_line_marked(const lc_line *l, char *out, int cap, int stamps, int width)
         sb_str(&b, " ***");
         break;
     case LC_NOTE:
-        sb_fg(&b, LC_ACCENT); sb_str(&b, l->text);
+        sb_fg(&b, l->tone > 0 ? l->tone : LC_ACCENT); sb_str(&b, l->text);
         break;
     case LC_ACTIVITY_LINE:
         sb_fg(&b, LC_ACTIVITY); sb_ch(&b, '['); sb_str(&b, l->time); sb_str(&b, "] "); sb_str(&b, l->text);

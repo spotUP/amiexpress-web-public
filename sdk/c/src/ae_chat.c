@@ -643,6 +643,33 @@ int ae_chat_reactions(ae_chat *c, const char *msg_id)
 }
 
 /* `"key":"value"` appended at `at`, a comma first unless it is the first field. -1 when it does not fit. */
+int ae_chat_dm_group(ae_chat *c, const char *const *peers, int n, const char *text,
+                     char *thread_id, int cap)
+{
+    char message[BODY_MAX + AE_CHAT_TEXT_MAX * 6];
+    char body[BODY_MAX + AE_CHAT_TEXT_MAX * 6 + 512];
+    long at;
+    int i, len;
+
+    if (peers == 0 || n < 1) return AE_CHAT_ERR_ARGS;
+    len = build_message(c, text, 0, 0, message, sizeof message);
+    if (len < 0) return len;
+    at = ae_req_put_raw(body, sizeof body, 0, "{\"participants\":[");
+    for (i = 0; i < n && at >= 0; i++) {
+        if (blank(peers[i])) return AE_CHAT_ERR_ARGS;
+        if (i > 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, ",");
+        if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, peers[i]);
+    }
+    /* the message object without its opening brace: ,"content":...,"clientId":...} */
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "],");
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, message + 1);
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    len = call(c, "POST", AE_CHAT_BASE "/dm-group", body, (unsigned long)at);
+    if (len == AE_CHAT_OK && thread_id != 0)
+        json_extract_string(c->reply, "threadId", thread_id, (unsigned long)cap);
+    return len;
+}
+
 static long put_field(char *body, unsigned long size, long at, const char *key, const char *value)
 {
     char lead[40];

@@ -190,6 +190,12 @@ int ae_chat_dm_history(ae_chat *c, const char *thread_id, long before, int limit
 /** POST /dm/:peer ("handle@BOARD"). `thread_id` (may be NULL) gets the DM thread. */
 int ae_chat_dm(ae_chat *c, const char *peer, const char *text, char *thread_id, int cap);
 
+/** POST /dm-group: one message to a group of `n` peers ("handle@BOARD").
+    The hub adds the caller; it needs 3+ unique members and at most 10.
+    `thread_id` (may be NULL) gets the group thread ("dg..."). */
+int ae_chat_dm_group(ae_chat *c, const char *const *peers, int n, const char *text,
+                     char *thread_id, int cap);
+
 /** GET dm.txt. Rows: threadId, peer, lastAt, unread. */
 int ae_chat_dm_list(ae_chat *c);
 

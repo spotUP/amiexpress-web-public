@@ -345,7 +345,7 @@ static void test_door_keys(void)
 {
     int rc;
     start_stub();
-    rc = drive(KEYS("\r" "hello world\r" "/react 2 +1\r" "/d bob hi bob\r" "/?\r" "x" "/q\r"), 0);
+    rc = drive(KEYS("\r" "hello world\r" "/react 2 +1\r" "/msg @bob hi bob\r" "/?\r" "x" "/q\r"), 0);
     assert(rc == 0);
     assert(st->sessions == 1 && st->rooms_listed >= 1 && st->joins == 1 && st->histories == 1);
     assert(st->messages == 1 && strcmp(st->last_message, "hello world") == 0);
@@ -376,7 +376,15 @@ static void test_door_lists(void)
     assert(has_line("alice", "private hello"));                                        /* Enter opened the DM thread */
     assert(has_line(0, "bob in #lobby (sysop)"));
     stop_stub();
-    printf("  [OK] door: who and direct-message lists load; Enter opens a DM thread\n");
+
+    start_stub();                                       /* a live DM for the open thread lands in it (label = bare thread id) */
+    strcpy(st->pending_row, "dm|th1|alice|d9|1700000500|0|live one");
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;
+    drive(KEYS("\t" "\x1b[F" "\r" "/q\r"), 1);
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    assert(has_line("alice", "live one") && !has_line(0, "[DM from alice]"));
+    stop_stub();
+    printf("  [OK] door: who and direct-message lists load; Enter opens a DM thread; its live DMs land in it\n");
 }
 
 static void test_door_idle_poll(void)
@@ -999,6 +1007,52 @@ static void test_door_typing(void)
     printf("  [OK] door: typing sends throttled buffers and a final \"\", typing events set and clear preview rows\n");
 }
 
+static int dm_note(const char *text, int tone)
+{
+    int i;
+    for (i = 0; i < M.nlines; i++)
+        if (M.lines[i].kind == LC_NOTE && strcmp(M.lines[i].text, text) == 0 && M.lines[i].tone == tone) return 1;
+    return 0;
+}
+
+static int activity_has(const char *text)
+{
+    int i;
+    for (i = 0; i < M.nlines; i++) if (M.lines[i].kind == LC_ACTIVITY_LINE && strcmp(M.lines[i].text, text) == 0) return 1;
+    return 0;
+}
+
+/* Row 6: TS msgCmd + formatDmLine. Leading "@" words are targets; one is chat:dm, 2+ is
+ * chat:group-dm (hub POST /dm-group). Sent lines are magenta, received cyan plus an activity line. */
+static void test_door_dm_and_group_dm(void)
+{
+    start_stub();
+    drive(KEYS("\r" "/msg bob hi\r" "/pm @bob hi bob\r" "/dm @bob @carol hey all\r" "/q\r"), 1);
+    assert(has_line(0, "Usage: /msg @user [@user2 ...] message"));             /* no "@": TS usage error */
+    assert(st->dms == 1 && strcmp(st->last_dm_peer, "bob") == 0 && strcmp(st->last_dm_text, "hi bob") == 0);
+    assert(dm_note("[DM to bob]: hi bob", LC_DM_SENT));
+    assert(st->group_dms == 1);
+    assert(strstr(st->last_group_body, "\"participants\":[\"bob\",\"carol\"]") != 0);
+    assert(strstr(st->last_group_body, "\"content\":\"hey all\"") != 0 && strstr(st->last_group_body, "\"clientId\":") != 0);
+    assert(dm_note("[Group DM to bob, carol]: hey all", LC_DM_SENT));
+    stop_stub();
+
+    start_stub();                                                      /* received 1:1 DM */
+    strcpy(st->pending_row, "dm|dm0123456789ab|alice|d5|1700000500|0|psst");
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;
+    drive(KEYS("\r" "/q\r"), 1);
+    assert(dm_note("[DM from alice]: psst", LC_DM_RECEIVED) && activity_has("DM from alice"));
+    stop_stub();
+
+    start_stub();                                                      /* received group DM: thread id starts "dg" */
+    strcpy(st->pending_row, "dm|dgabc123def456|alice|g5|1700000500|0|hey all");
+    drive(KEYS("\r" "/q\r"), 1);
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    assert(dm_note("[Group DM from alice]: hey all", LC_DM_RECEIVED) && activity_has("Group DM from alice"));
+    stop_stub();
+    printf("  [OK] door: /msg @a and /msg @a @b send DM and group DM, DM lines render as the TS door's\n");
+}
+
 static void test_door_board_joined(void)
 {
     start_stub();
@@ -1425,6 +1479,7 @@ int main(void)
     test_door_delete_and_kicked();
     test_door_b4_presence();
     test_door_board_joined();
+    test_door_dm_and_group_dm();
     test_door_typing();
     test_door_bbs_events();
     test_door_b4_marks();
