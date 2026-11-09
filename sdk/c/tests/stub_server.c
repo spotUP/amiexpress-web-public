@@ -530,6 +530,13 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
             sprintf(st->pending_row, "delete|lobby|Tester|%s|1700000500|0|", path + 18);
         }
         chat_reply(fd, 200, "application/json", method[0] == 'P' ? "{\"id\":\"m1\"}" : "{\"ok\":true}");
+    } else if (strcmp(method, "PUT") == 0 && strncmp(path, "/chat/v1/rooms/", 15) == 0 && strstr(path, "/motd") != 0) {
+        /* PUT /rooms/:id/motd: the hub's room_motd event comes on the next poll */
+        chat_note_write(st, path, body);
+        chat_copy_json_field(st->room_motd, sizeof st->room_motd, body, "motd");
+        st->room_motd_puts++;
+        sprintf(st->pending_row, "room_motd|lobby|Tester||1700000500|0|%s", st->room_motd);
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
     } else if (strcmp(method, "PUT") == 0 && strstr(path, "/topic") != 0) {
         char topic[200];
         chat_note_write(st, path, body);
@@ -626,7 +633,11 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
             st->last_join[n] = '\0';
         }
         if (strstr(path, "/rooms/nosuch/") != 0) { chat_reply(fd, 404, "application/json", "{\"error\":\"not_found\"}"); return; }
-        chat_reply(fd, 200, "application/json", "{\"id\":\"lobby\",\"name\":\"Lobby\",\"topic\":\"Hello all\",\"members\":3,\"ops\":1,\"since\":5}");
+        {
+            char reply[320];
+            sprintf(reply, "{\"id\":\"lobby\",\"name\":\"Lobby\",\"topic\":\"Hello all\",\"motd\":\"%.128s\",\"members\":3,\"ops\":1,\"since\":5}", st->room_motd);
+            chat_reply(fd, 200, "application/json", reply);
+        }
     } else if (is_post && strstr(path, "/leave") != 0) {
         st->leaves++;
         chat_reply(fd, 204, "text/plain", "");

@@ -529,7 +529,10 @@ void lc_line_marked(const lc_line *l, char *out, int cap, int stamps, int width)
     }
     switch (l->kind) {
     case LC_SYSTEM:
-        sb_fg(&b, LC_DIM); sb_str(&b, "*** "); sb_str(&b, l->text);
+        sb_fg(&b, LC_DIM); sb_str(&b, "*** ");
+        if (l->tone > 0) sb_fg(&b, l->tone);                                  /* TS "{accentAlt}[MOTD] x{/}" inside the grey */
+        sb_str(&b, l->text);
+        if (l->tone > 0) sb_fg(&b, LC_DIM);
         if (strncmp(l->text, "--- ", 4) == 0) sb_ch(&b, UI_CELLS_M_BASE);   /* the TS history marker ends its grey early */
         sb_str(&b, " ***");
         break;

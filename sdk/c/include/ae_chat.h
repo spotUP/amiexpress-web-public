@@ -116,9 +116,9 @@ int ae_chat_rooms(ae_chat *c);
 int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility,
                         char *id, int id_cap);
 
-/** POST /rooms/:id/join. A "since" newer than c->last_seq moves last_seq up to it. On success `name`/`topic` (either may be NULL) get the room's, `members` its count. */
+/** POST /rooms/:id/join. A "since" newer than c->last_seq moves last_seq up to it. On success `name`/`topic`/`motd` (any may be NULL) get the room's, `members` its count. */
 int ae_chat_join(ae_chat *c, const char *room, char *name, int name_cap,
-                 char *topic, int topic_cap, int *members);
+                 char *topic, int topic_cap, char *motd, int motd_cap, int *members);
 
 /** POST /rooms/:id/leave. */
 int ae_chat_leave(ae_chat *c, const char *room);
@@ -153,6 +153,9 @@ int ae_chat_delete(ae_chat *c, const char *msg_id);
 
 /** PUT /rooms/:id/topic {topic}. An empty topic clears it. */
 int ae_chat_topic(ae_chat *c, const char *room, const char *topic);
+
+/** PUT /rooms/:id/motd {motd}: the room's message of the day (TS /motd). An empty motd clears it. Owner or moderator only. */
+int ae_chat_room_motd(ae_chat *c, const char *room, const char *motd);
 
 /** POST /rooms/:id/<action> {user, reason?, minutes?}. action: kick, ban, unban, mute, unmute, op, deop.
  *  user is handle@BOARD. reason may be NULL or ""; minutes (mute only) 0 means until unmuted. */

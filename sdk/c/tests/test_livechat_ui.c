@@ -224,6 +224,29 @@ static int message_formatting(void)
     return fail;
 }
 
+/* H3: a system line with a tone (TS "{accentAlt}[MOTD] x{/}") draws its text in the tone and its frame in grey. */
+static int system_line_tone(void)
+{
+    lc_line l;
+    char out[LC_TEXT_MAX * 4], shown[128];
+    ui_cells c;
+    int k, at, fail = 0;
+    memset(&l, 0, sizeof l);
+    l.kind = LC_SYSTEM;
+    l.tone = LC_ACTIVITY;
+    strcpy(l.text, "[MOTD] Be nice");
+    lc_line_marked(&l, out, sizeof out, 0, 100);
+    if (ui_cells_open(&c, 100, 2) != 0) return 1;
+    ui_cells_marked(&c, 0, 0, out, 0, (int)strlen(out), 100);
+    for (k = 0; k < 100; k++) shown[k] = c.back[k].ch == 0 ? ' ' : (char)c.back[k].ch;
+    shown[100] = '\0';
+    at = (int)(strstr(shown, "[MOTD]") - shown);
+    if (strstr(shown, "*** [MOTD] Be nice ***") == 0 || c.back[at].fg != LC_ACTIVITY
+        || c.back[at - 2].fg != LC_DIM || c.back[at + 15].fg != LC_DIM) { printf("system tone: '%s'\n", shown); fail = 1; }
+    ui_cells_close(&c);
+    return fail;
+}
+
 /* B3: /timestamps and /compact decide whether the time column is drawn. */
 static int stamps_follow_the_pref(void)
 {
@@ -405,7 +428,7 @@ static int event_line_marks(void)
 
 int main(void)
 {
-    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules() | message_formatting() | event_line_marks();
+    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws() | slash_menu_rules() | message_formatting() | event_line_marks() | system_line_tone();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

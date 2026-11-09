@@ -217,7 +217,7 @@ static void test_client(void)
 {
     ae_chat c;
     ae_chat_config cfg;
-    char name[48], topic[80], tid[32], *f[AE_CHAT_ROW_FIELDS];
+    char name[48], topic[80], motd[64], tid[32], *f[AE_CHAT_ROW_FIELDS];
     int members = 0, count = 0, n;
     FILE *cf;
     start_stub();
@@ -230,9 +230,15 @@ static void test_client(void)
     assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) >= 6 && strcmp(f[0], "secret") == 0);
     assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) == 0);
 
-    assert(ae_chat_join(&c, "lobby", name, sizeof name, topic, sizeof topic, &members) == AE_CHAT_OK);
+    assert(ae_chat_join(&c, "lobby", name, sizeof name, topic, sizeof topic, 0, 0, &members) == AE_CHAT_OK);
     assert(strcmp(name, "Lobby") == 0 && strcmp(topic, "Hello all") == 0 && members == 3 && c.last_seq == 5);
-    assert(ae_chat_join(&c, "nosuch", name, sizeof name, topic, sizeof topic, &members) == AE_CHAT_ERR_STATUS);
+    assert(ae_chat_room_motd(&c, "lobby", "Be kind") == AE_CHAT_OK && st->room_motd_puts == 1);
+    assert(strcmp(st->last_write_path, "/chat/v1/rooms/lobby/motd") == 0 && strcmp(st->last_write_body, "{\"motd\":\"Be kind\"}") == 0);
+    assert(ae_chat_join(&c, "lobby", name, sizeof name, topic, sizeof topic, motd, sizeof motd, &members) == AE_CHAT_OK);
+    assert(strcmp(motd, "Be kind") == 0);
+    st->room_motd[0] = '\0';
+    st->pending_row[0] = '\0';
+    assert(ae_chat_join(&c, "nosuch", name, sizeof name, topic, sizeof topic, 0, 0, &members) == AE_CHAT_ERR_STATUS);
     assert(strcmp(c.error, "not_found") == 0);
 
     assert(ae_chat_history(&c, "lobby", 0, 20) == AE_CHAT_OK);
@@ -650,7 +656,12 @@ static void test_door_phase_a(void)
     assert(has_line(0, "Search query must be at least 2 characters"));
     assert(has_line(0, "Found 1 result for \"hello\"") && has_line(0, "alice: hello there"));
     assert(has_line(0, "No MOTD set. Use /motd <text> to set, /motd --clear to clear."));
-    assert(has_line(0, "[MOTD] Be nice"));
+    assert(has_line(0, "[MOTD] Be nice") && has_line(0, "[MOTD] cleared"));
+    assert(st->room_motd_puts == 2);
+    for (i = 0; i < M.nlines; i++)                          /* TS accentAlt: the motd text has its own colour */
+        if (strstr(M.lines[i].text, "[MOTD] ") != 0) { assert(M.lines[i].kind == LC_SYSTEM && M.lines[i].tone == LC_ACTIVITY); found++; }
+    assert(found == 3);                                      /* the event, the cached show, the clear */
+    found = 0;
     assert(has_line(0, "  party  web PARTY  telnet \\o/") && !has_line(0, "  pic  web") && !has_line(0, "  EMOJI  web"));
     assert(st->emoji_calls == 2 && strcmp(st->emoji_body, "{\"display\":\"hi\",\"ascii\":\"o/\"}") == 0);
     assert(has_line(0, ":smile: is a built-in emoji.") && has_line(0, "Usage: /customemoji add <name> <display> <ascii>"));

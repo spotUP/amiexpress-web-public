@@ -487,7 +487,7 @@ int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const c
 }
 
 int ae_chat_join(ae_chat *c, const char *room, char *name, int name_cap,
-                 char *topic, int topic_cap, int *members)
+                 char *topic, int topic_cap, char *motd, int motd_cap, int *members)
 {
     char path[PATH_MAX_LEN];
     int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/join");
@@ -498,6 +498,7 @@ int ae_chat_join(ae_chat *c, const char *room, char *name, int name_cap,
     if (rc != AE_CHAT_OK) return rc;
     if (name != 0) json_extract_string(c->reply, "name", name, (unsigned long)name_cap);
     if (topic != 0) json_extract_string(c->reply, "topic", topic, (unsigned long)topic_cap);
+    if (motd != 0) json_extract_string(c->reply, "motd", motd, (unsigned long)motd_cap);
     if (members != 0) *members = (json_extract_bool(c->reply, "members", &n) == 0) ? n : 0;
     if (json_extract_bool(c->reply, "since", &n) == 0 && n > c->last_seq) c->last_seq = n;
     return AE_CHAT_OK;
@@ -682,6 +683,20 @@ int ae_chat_topic(ae_chat *c, const char *room, const char *topic)
 
     if (rc != AE_CHAT_OK) return rc;
     at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "topic", topic ? topic : "");
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "PUT", path, body, (unsigned long)at);
+}
+
+int ae_chat_room_motd(ae_chat *c, const char *room, const char *motd)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    long at;
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/motd");
+
+    if (rc != AE_CHAT_OK) return rc;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "motd", motd ? motd : "");
     if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
     if (at < 0) return AE_CHAT_ERR_TOO_LONG;
     return call(c, "PUT", path, body, (unsigned long)at);

@@ -102,6 +102,8 @@ typedef struct {
     char last_react_msg[24];               /* message id of the latest react or unreact */
     volatile int pin_calls, emoji_calls, room_admin_calls, thread_views, motd_set;   /* Phase A */
     char emoji_body[120];                  /* body of the latest PUT /emoji/:name */
+    char room_motd[128];                   /* the room's motd: PUT /rooms/:id/motd sets it, the join reply carries it */
+    volatile int room_motd_puts;
     char last_write_path[128];             /* path of the latest edit, delete, topic, moderation or invite call */
     char last_write_body[300];             /* its JSON body ("" for DELETE) */
     char last_dm_peer[64];

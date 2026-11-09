@@ -88,6 +88,7 @@ static int idle_ticks;
 static char room_id[48];
 static char room_name[48];
 static char room_topic[80];
+static char room_motd[512];   /* the room's message of the day (TS chat-socket-handlers caches it on join and room:motd) */
 static int room_members;
 static char dm_thread[32];
 static char dm_peer[24];
@@ -354,6 +355,13 @@ static void add_note(int kind, const char *text)
 }
 
 static void system_line(const char *text) { add_note(LC_SYSTEM, text); }
+
+/** TS addSystemMessage("{accentAlt}[MOTD] x{/accentAlt}"): a system line whose text is in the motd colour. */
+static void motd_line(const char *text)
+{
+    add_note(LC_SYSTEM, text);
+    M.lines[M.nlines - 1].tone = LC_ACTIVITY;
+}
 
 /* ---- modals ------------------------------------------------------------- */
 
@@ -741,6 +749,12 @@ static void take_events(void)
             sprintf(M.pane_label, "%.40s - %.50s", room_name, room_topic);
             sprintf(line, "%.24s set the topic: %.200s", user[0] != '\0' ? user : "Someone", room_topic);
             system_line(line);
+        } else if (strcmp(type, "room_motd") == 0 && in_room) {
+            /* TS room:motd: cache it, then "[MOTD] x" or "[MOTD] cleared" */
+            clean(room_motd, sizeof room_motd, f[7]);
+            if (room_motd[0] != '\0') sprintf(line, "[MOTD] %.200s", room_motd);
+            else strcpy(line, "[MOTD] cleared");
+            motd_line(line);
         } else if ((strcmp(type, "op") == 0 || strcmp(type, "deop") == 0) && in_room) {
             sprintf(line, "%.24s is %s a room operator", user[0] != '\0' ? user : "Someone", type[0] == 'd' ? "no longer" : "now");
             system_line(line);
@@ -812,15 +826,16 @@ static void take_history(void)
 /** Joins a room by id and shows it; the room left is the one before, once the new join worked. */
 static int join_room(const char *id)
 {
-    char name[48], topic[80], line[128], old[48];
+    char name[48], topic[80], motd[512], line[128], old[48];
     int members = 0, rc;
     copy(old, sizeof old, room_id);
-    rc = ae_chat_join(&chat, id, name, sizeof name, topic, sizeof topic, &members);
+    rc = ae_chat_join(&chat, id, name, sizeof name, topic, sizeof topic, motd, sizeof motd, &members);
     if (rc != AE_CHAT_OK) { show_error(rc); return rc; }
     if (old[0] != '\0' && strcmp(old, id) != 0) ae_chat_leave(&chat, old);
     clean(room_id, sizeof room_id, id);
     clean(room_name, sizeof room_name, name);
     clean(room_topic, sizeof room_topic, topic);
+    clean(room_motd, sizeof room_motd, motd);      /* TS join caches the motd and prints nothing */
     room_members = members;
     dm_thread[0] = '\0';
     copy(M.room, sizeof M.room, room_name);
@@ -1566,20 +1581,19 @@ static void search_typed(const char *rest)
     for (i = 0; i < n; i++) system_line(hits[i]);
 }
 
-/** /motd [text|--clear]. The hub's message of the day is board-wide; a set is sysop only. */
+/** /motd [text|--clear]: the room's message of the day (TS commands/mode.ts + input-submit-handler).
+    No text shows the cached one; a set or clear goes to the hub, whose room_motd event prints it. */
 static void motd_typed(const char *rest)
 {
     char t[LC_TEXT_MAX];
-    int rc;
     if (*rest == '\0') {
-        rc = ae_chat_motd(&chat, t + 7, (int)sizeof t - 7);
-        if (rc != AE_CHAT_OK) { show_error(rc); return; }
-        if (t[7] == '\0') { system_line("No MOTD set. Use /motd <text> to set, /motd --clear to clear."); return; }
-        memcpy(t, "[MOTD] ", 7);
-        system_line(t);
+        if (room_motd[0] == '\0') { system_line("No MOTD set. Use /motd <text> to set, /motd --clear to clear."); return; }
+        sprintf(t, "[MOTD] %.200s", room_motd);
+        motd_line(t);
         return;
     }
-    then_poll(ae_chat_motd_set(&chat, strcmp(rest, "--clear") == 0 ? "" : rest));
+    if (room_id[0] == '\0') { system_line("Join a room first."); return; }
+    then_poll(ae_chat_room_motd(&chat, room_id, strcmp(rest, "--clear") == 0 ? "" : rest));
 }
 
 /** The hub's custom emoji, so a ":name:" in a message shows its ascii face (TS utils/emojis.ts). Best effort. */
