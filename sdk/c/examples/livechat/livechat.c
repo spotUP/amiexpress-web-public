@@ -142,6 +142,30 @@ static void clean(char *dst, size_t cap, const char *src)
         unsigned char ch = (unsigned char)*src;
         dst[n++] = (ch < 32 || ch == 127) ? ' ' : (char)ch;
     }
+    /* Cut short: never leave half a UTF-8 sequence or half a {colour} / ~effect~ tag at the end. */
+    if (*src != '\0') {
+        size_t k = n, floor = n > 40 ? n - 40 : 0;
+        while (k > floor && dst[k - 1] != '{' && dst[k - 1] != '}') k--;           /* an unclosed {tag} */
+        if (k > floor && dst[k - 1] == '{') n = k - 1;
+        else {
+            size_t t = n;
+            while (t > floor && (dst[t - 1] == '-' || (dst[t - 1] >= 'a' && dst[t - 1] <= 'z') || (dst[t - 1] >= '0' && dst[t - 1] <= '9'))) t--;
+            if (t > floor && dst[t - 1] == '~') {
+                size_t open = 0, i;
+                for (i = 0; i < t; i++) if (dst[i] == '~') open++;
+                if (open % 2 == 1) n = t - 1;                                       /* an unclosed ~effect */
+            }
+        }
+        {
+            size_t lead = n;
+            while (lead > 0 && n - lead < 4 && ((unsigned char)dst[lead - 1] & 0xC0) == 0x80) lead--;   /* continuation bytes */
+            if (lead > 0 && n - lead < 4) {
+                unsigned char b = (unsigned char)dst[lead - 1];
+                size_t want = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 1;
+                if (want > 1 && n - (lead - 1) < want) n = lead - 1;
+            }
+        }
+    }
     dst[n] = '\0';
 }
 

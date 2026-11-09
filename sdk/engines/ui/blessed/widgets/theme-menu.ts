@@ -79,6 +79,11 @@ export function openThemeMenu(options: ThemeMenuOptions): Promise<Theme> {
   const opened = activeTheme(options);
   let showing = opened;
 
+  /* The name column is the longest theme name plus one space; a row never runs past the 52-cell interior
+   * (the C door's draw_theme in livechat_ui.c does the same). */
+  const nameColumn = Math.max(...themes.map((theme) => theme.name.length)) + 1;
+  const ROW_WIDTH = 52;
+
   return new Promise((resolve) => {
     const parent = (options.parent ?? options.screen) as never;
 
@@ -111,7 +116,7 @@ export function openThemeMenu(options: ThemeMenuOptions): Promise<Theme> {
         bg: showing.tokens.ground,
         selected: { fg: showing.tokens.selectionInk, bg: showing.tokens.selectionBg },
       },
-      items: themes.map((theme) => ` ${theme.name.padEnd(18, ' ')}${theme.blurb}`),
+      items: themes.map((theme) => ` ${theme.name.padEnd(nameColumn, ' ')}${theme.blurb}`.slice(0, ROW_WIDTH)),
     } as never);
 
     const help = new Box({
