@@ -90,6 +90,7 @@ typedef struct {
     char id[48];           /* room id, DM thread id, or user handle */
     char status;           /* users: 0 online, 'a' away, 'b' busy, 'd' do not disturb */
     char note[28];         /* users: the status text (the away message) */
+    char art;              /* rooms: 1 for an Art room, marked [A] as the TS sidebar does */
 } lc_side;
 
 enum { LC_FOCUS_INPUT, LC_FOCUS_SIDEBAR, LC_FOCUS_MENU };
@@ -179,7 +180,7 @@ void lc_fmt_open(lc_model *m, int a, int b);
 /** Move the focused list's selection by `delta` (category moves reload the items at row 0). */
 void lc_fmt_move(lc_model *m, int delta);
 
-enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL, LC_CTX_REACT };   /* REACT: the chat menu's reaction picker */
+enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL, LC_CTX_REACT, LC_CTX_KIND };   /* REACT: the chat menu's reaction picker; KIND: /create's channel type */
 
 /* What a click lands on, from the regions the last lc_draw laid out. */
 enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, LC_HIT_INPUT,

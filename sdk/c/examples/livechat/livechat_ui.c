@@ -614,8 +614,8 @@ static void draw_side_item(ui_cells *c, const lc_side *s, int row, int width, in
     switch (s->kind) {
     case LC_SIDE_HEAD: sprintf(buf, "  \001\314\002%.38s", s->label); break;
     case LC_SIDE_ROOM:
-        if (s->joined) sprintf(buf, "%sv # %.38s", mark, s->label);
-        else sprintf(buf, "%s\001\360> # %.38s", mark, s->label);
+        if (s->joined) sprintf(buf, "%sv %s %.36s", mark, s->art ? "[A]" : "#", s->label);
+        else sprintf(buf, "%s\001\360> %s %.36s", mark, s->art ? "[A]" : "#", s->label);
         break;
     case LC_SIDE_USER: {                   /* TS user-status marks: [*] online, [~] away, [-] do not disturb; [!] busy */
         const char *dot = s->status == 'a' ? "[~]" : s->status == 'b' ? "[!]" : s->status == 'd' ? "[-]" : "[*]";

@@ -109,6 +109,8 @@ typedef struct {
     char last_dm_peer[64];
     char last_dm_text[512];
     char last_created[64];
+    char last_created_kind[16];            /* "kind" of the latest POST /rooms, "" when it sent none */
+    int rooms_kinds;                       /* set: rooms.txt also lists an art and a voice room, kind last */
     char last_join[64];                    /* room id from the latest POST /rooms/<id>/join path */
 } stub_chat_stats;
 

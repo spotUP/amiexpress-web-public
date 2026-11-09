@@ -458,7 +458,7 @@ int ae_chat_rooms(ae_chat *c)
 }
 
 int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility,
-                        char *id, int id_cap)
+                        const char *kind, char *id, int id_cap)
 {
     char body[BODY_MAX];
     long at;
@@ -476,6 +476,10 @@ int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const c
     if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, ",\"visibility\":");
     if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at,
                                              blank(visibility) ? "public" : visibility);
+    if (at >= 0 && !blank(kind)) {                       /* no kind: the hub makes a text room */
+        at = ae_req_put_raw(body, sizeof body, (unsigned long)at, ",\"kind\":");
+        if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, kind);
+    }
     if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
     if (at < 0) return AE_CHAT_ERR_TOO_LONG;
     rc = call(c, "POST", AE_CHAT_BASE "/rooms", body, (unsigned long)at);

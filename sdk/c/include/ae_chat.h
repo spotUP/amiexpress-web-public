@@ -108,13 +108,15 @@ int ae_chat_open(ae_chat *c, const ae_chat_config *cfg, const char *handle, int 
 /** End the session (DELETE /sessions/current). Safe on an unopened ae_chat. */
 int ae_chat_close(ae_chat *c);
 
-/** GET rooms.txt. Rows: id, name, topic, visibility, members, owner. */
+/** GET rooms.txt. Rows: id, name, topic, visibility, members, owner, kind. A hub from before room
+ *  types sends no kind: such a room is a text room. */
 int ae_chat_rooms(ae_chat *c);
 
-/** POST /rooms. `topic` may be NULL. `visibility` "public" or "private". On success `id` (may be NULL)
+/** POST /rooms. `topic` may be NULL. `visibility` "public" or "private". `kind` "text", "voice" or
+ *  "art"; NULL or "" leaves it to the hub, which makes a text room. On success `id` (may be NULL)
  *  gets the new room's id: rooms are joined by id, never by name. */
 int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility,
-                        char *id, int id_cap);
+                        const char *kind, char *id, int id_cap);
 
 /** POST /rooms/:id/join. A "since" newer than c->last_seq moves last_seq up to it. On success `name`/`topic`/`motd` (any may be NULL) get the room's, `members` its count. */
 int ae_chat_join(ae_chat *c, const char *room, char *name, int name_cap,

@@ -105,7 +105,12 @@ static int keep_lines;          /* join_room adds to the pane instead of startin
 #define ROOMS_MAX 24
 static char rooms_id[ROOMS_MAX][48];
 static char rooms_name[ROOMS_MAX][40];
+static char rooms_kind[ROOMS_MAX][8];     /* text, voice or art (TS commands/chan-admin.ts ROOM_KINDS) */
 static int rooms_count;
+
+/* /create's name and visibility while the channel-type picker is open. */
+static char pending_room[40];
+static const char *pending_vis = "public";
 
 enum { PROMPT_JOIN, PROMPT_CREATE };
 static int prompt_kind;
@@ -504,7 +509,10 @@ static void load_sidebar(void)
     side_add(LC_SIDE_HEAD, 0, "TEXT CHANNELS", "");
     for (i = 0; i < rooms_count; i++) {
         int here = strcmp(rooms_id[i], room_id) == 0;
+        /* TS lists Voice rooms under VOICE CHANNELS, a section a telnet caller does not get. */
+        if (strcmp(rooms_kind[i], "voice") == 0) continue;
         side_add(LC_SIDE_ROOM, here, rooms_name[i], rooms_id[i]);
+        M.side[M.nside - 1].art = strcmp(rooms_kind[i], "art") == 0;
         if (here) for (j = 0; j < nusers; j++) side_add_user(users[j], ustat[j], utext[j]);
     }
     if (ae_chat_dm_list(&chat) == AE_CHAT_OK) {
@@ -527,10 +535,15 @@ static int load_rooms(void)
     int rc = ae_chat_rooms(&chat);
     rooms_count = 0;
     if (rc != AE_CHAT_OK) return rc;
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5) {     /* id|name|topic|visibility|members|owner */
+    for (;;) {                                                         /* id|name|topic|visibility|members|owner|kind */
+        int n = ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS);
+        if (n < 5) break;
         if (rooms_count == ROOMS_MAX) continue;
         clean(rooms_id[rooms_count], sizeof rooms_id[0], f[0]);
         clean(rooms_name[rooms_count], sizeof rooms_name[0], f[1]);
+        /* A hub from before room types sends no kind: every room was text. */
+        clean(rooms_kind[rooms_count], sizeof rooms_kind[0],
+              n >= 7 && (strcmp(f[6], "voice") == 0 || strcmp(f[6], "art") == 0) ? f[6] : "text");
         rooms_count++;
     }
     return AE_CHAT_OK;
@@ -832,10 +845,37 @@ static void take_history(void)
 }
 
 /** Joins a room by id and shows it; the room left is the one before, once the new join worked. */
+/** Room names compare without case, as TS findRoom does. */
+static int same_name(const char *a, const char *b)
+{
+    while (*a != '\0' && tolower((unsigned char)*a) == tolower((unsigned char)*b)) { a++; b++; }
+    return tolower((unsigned char)*a) == tolower((unsigned char)*b);
+}
+
+/** The type of a listed room, by id or name; "text" for one the list does not hold. */
+static const char *room_kind_of(const char *id)
+{
+    int i;
+    for (i = 0; i < rooms_count; i++)
+        if (strcmp(rooms_id[i], id) == 0 || same_name(rooms_name[i], id)) return rooms_kind[i];
+    return "text";
+}
+
+#define LC_JOIN_REFUSED (-100)   /* a Voice or Art room: the door has neither yet */
+
+/** TS opens the voice grid or the drawing canvas; telnet has neither yet (spot 2026-11-09). */
+static int refuse_kind(const char *kind)
+{
+    system_line(strcmp(kind, "voice") == 0 ? "Voice channels are not on Amiga yet." : "Art channels are not on Amiga yet.");
+    return LC_JOIN_REFUSED;
+}
+
 static int join_room(const char *id)
 {
     char name[48], topic[80], motd[512], line[128], old[48];
     int members = 0, rc;
+    const char *kind = room_kind_of(id);
+    if (strcmp(kind, "text") != 0) return refuse_kind(kind);
     copy(old, sizeof old, room_id);
     rc = ae_chat_join(&chat, id, name, sizeof name, topic, sizeof topic, motd, sizeof motd, &members);
     if (rc != AE_CHAT_OK) { show_error(rc); return rc; }
@@ -893,17 +933,57 @@ static void next_channel(void)
     join_room(rooms_id[(i + 1) % rooms_count]);
 }
 
-/** Makes a room and walks into it. The server joins by id, so the id comes from the create reply. */
-static void new_room(const char *name, const char *visibility)
+/** Makes a room of `kind` and walks into it. The server joins by id, so the id comes from the create reply. */
+static void new_room(const char *name, const char *visibility, const char *kind)
 {
     char id[sizeof room_id], line[80];
-    int rc = ae_chat_room_create(&chat, name, "", visibility, id, (int)sizeof id);
+    int rc = ae_chat_room_create(&chat, name, "", visibility, kind, id, (int)sizeof id);
     if (rc != AE_CHAT_OK) { show_error(rc); return; }
     load_rooms();
-    if (join_room(id) == AE_CHAT_OK) {
-        sprintf(line, "Created #%.40s", room_name);
-        system_line(line);
+    /* The kind is known here; a stale room list must not let a Voice or Art room be joined. */
+    rc = strcmp(kind, "text") != 0 ? refuse_kind(kind) : join_room(id);
+    if (rc == AE_CHAT_OK) sprintf(line, "Created #%.40s", room_name);
+    else if (rc == LC_JOIN_REFUSED) sprintf(line, "Created #%.40s", name);
+    else return;
+    system_line(line);
+}
+
+static void ctx_open(int kind, int target, int row, int col);
+static void arg_word(const char *text, char *out, size_t cap);
+static void usage(const char *text);
+
+/** TS server.ts pickRoomKind: every new channel gets a type, asked before it reaches the hub. */
+static void ask_room_kind(const char *name, const char *visibility)
+{
+    clean(pending_room, sizeof pending_room, name);
+    pending_vis = visibility;
+    system_line("Channel type: Text, Voice or Art?");
+    ctx_open(LC_CTX_KIND, 0, M.rows / 2 - 2, M.cols / 2 - 6);
+}
+
+/** /create name [--type text|voice|art]: the flag skips the question, as in TS commands/chan-admin.ts. */
+static void create_typed(const char *text, const char *visibility)
+{
+    char name[sizeof pending_room], kind[16];
+    const char *flag = strstr(text, "--type");
+    int n;
+    kind[0] = '\0';
+    if (flag != 0) {
+        arg_word(flag + 6, kind, sizeof kind);
+        if (strcmp(kind, "text") != 0 && strcmp(kind, "voice") != 0 && strcmp(kind, "art") != 0) {
+            usage("/create #name [--type text|voice|art]");
+            return;
+        }
     }
+    n = flag != 0 ? (int)(flag - text) : (int)strlen(text);
+    if (n > (int)sizeof name - 1) n = (int)sizeof name - 1;
+    memcpy(name, text, (size_t)n);
+    name[n] = '\0';
+    while (n > 0 && name[n - 1] == ' ') name[--n] = '\0';
+    if (name[0] == '#') memmove(name, name + 1, strlen(name));
+    if (name[0] == '\0') { usage("/create #name [--type text|voice|art]"); return; }
+    if (kind[0] != '\0') new_room(name, visibility, kind);
+    else ask_room_kind(name, visibility);
 }
 
 static void list_rooms(void)
@@ -1805,7 +1885,7 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "clear", "cls")) { lines_clear(); return 0; }
     if (is_cmd(cmd, "n", "np") || strcmp(cmd, "create") == 0) {
         if (*rest == '\0') { open_prompt(PROMPT_CREATE, "New room name"); return 0; }
-        new_room(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
+        create_typed(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
         return 0;
     }
     if (is_cmd(cmd, "r", "reply")) { reply_typed(rest, 0); return 0; }
@@ -2098,6 +2178,9 @@ static void ctx_open(int kind, int target, int row, int col)
         for (n = 0; n < 10; n++) ctx_items[n] = c[n];
     } else if (kind == LC_CTX_REACT) {          /* sysop 2026-11-08: React picks one of the eight, not +1 */
         for (n = 0; n < LC_REACT_KINDS; n++) ctx_items[n] = lc_react_label(n);
+    } else if (kind == LC_CTX_KIND) {           /* TS ROOM_KIND_LABELS, in ROOM_KINDS order */
+        static const char *const k[] = { "Text", "Voice", "Art" };
+        for (n = 0; n < 3; n++) ctx_items[n] = k[n];
     } else {
         static const char *const r[] = { "Join", "Leave", "Info", "Expand/Collapse", "---", "Pin Channel" };
         for (n = 0; n < 6; n++) ctx_items[n] = r[n];
@@ -2165,6 +2248,13 @@ static void ctx_run(const char *it)
         else if (strcmp(it, "Delete") == 0) then_poll(ae_chat_delete(&chat, l->id));    /* TS: no confirm */
         else if (strcmp(it, "Pin Message") == 0) { sprintf(buf, "/pin %d", l->number); run_command(buf); }
         else not_yet(it);                /* Copy Text (OSC 52), Mark Unread */
+    } else if (M.ctx_kind == LC_CTX_KIND) {
+        char kind[8];
+        int i;
+        for (i = 0; it[i] != '\0' && i < (int)sizeof kind - 1; i++) kind[i] = (char)tolower((unsigned char)it[i]);
+        kind[i] = '\0';
+        if (pending_room[0] != '\0') new_room(pending_room, pending_vis, kind);
+        pending_room[0] = '\0';
     } else if (M.ctx_kind == LC_CTX_REACT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
         int i;
@@ -2395,7 +2485,7 @@ static int handle_key(int key)
             copy(text, sizeof text, M.prompt);
             M.modal = LC_MODAL_NONE;
             if (text[0] == '\0') return 0;
-            if (prompt_kind == PROMPT_JOIN) join_typed(text); else new_room(text, "public");
+            if (prompt_kind == PROMPT_JOIN) join_typed(text); else create_typed(text, "public");
             return 0;
         }
         if ((key == 8 || key == 127) && M.prompt_len > 0) { M.prompt[--M.prompt_len] = '\0'; return 0; }

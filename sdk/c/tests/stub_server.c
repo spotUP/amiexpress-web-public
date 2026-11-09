@@ -617,10 +617,14 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         chat_reply(fd, 204, "text/plain", "");
     } else if (is_get && strcmp(path, "/chat/v1/rooms.txt") == 0) {
         st->rooms_listed++;
-        chat_reply(fd, 200, "text/plain", "ROOMS|1|4|2\nlobby|Lobby|Hello all|public|3|boardA\nsecret|Secret||private|1|boardB\n");
+        if (st->rooms_kinds)                                   /* the hub since room types: kind is the last field */
+            chat_reply(fd, 200, "text/plain", "ROOMS|1|4|4\nlobby|Lobby|Hello all|public|3|boardA|text\n"
+                       "paint|Paint||public|0|boardA|art\ntalk|Talk||public|0|boardA|voice\nsecret|Secret||private|1|boardB\n");
+        else chat_reply(fd, 200, "text/plain", "ROOMS|1|4|2\nlobby|Lobby|Hello all|public|3|boardA\nsecret|Secret||private|1|boardB\n");
     } else if (is_post && strcmp(path, "/chat/v1/rooms") == 0) {
         st->rooms_created++;
         chat_copy_json_field(st->last_created, sizeof st->last_created, body, "name");
+        chat_copy_json_field(st->last_created_kind, sizeof st->last_created_kind, body, "kind");
         chat_reply(fd, 200, "application/json", "{\"id\":\"newroom\",\"name\":\"newroom\",\"visibility\":\"public\"}");
     } else if (is_post && strstr(path, "/join") != 0) {
         st->joins++;

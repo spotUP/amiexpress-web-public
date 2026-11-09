@@ -407,17 +407,49 @@ static void test_door_new_room(void)
 {
     int rc;
     start_stub();
-    rc = drive(KEYS("/create\r" "My Room\r" "/q\r"), 0);                /* no name: the prompt modal asks for it */
+    rc = drive(KEYS("/create\r" "My Room\r" "\r" "/q\r"), 0);          /* no name: the prompt asks; Enter picks Text */
     assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "My Room") == 0);
+    assert(strcmp(st->last_created_kind, "text") == 0);
     assert(st->joins == 2 && strcmp(st->last_join, "newroom") == 0);    /* auto-join, then the id the create reply gave */
     assert(has_line(0, "Created #"));
     stop_stub();
     start_stub();
-    rc = drive(KEYS("\r" "/n Second Room\r" "/q\r"), 0);
+    rc = drive(KEYS("\r" "/n Second Room\r" "\r" "/q\r"), 0);
     assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "Second Room") == 0);
     assert(st->joins == 2 && strcmp(st->last_join, "newroom") == 0);
     stop_stub();
     printf("  [OK] door: /create with the name prompt and /n with a name make a room and join it by its new id\n");
+}
+
+static void test_door_room_kind(void)
+{
+    int rc;
+    start_stub();
+    st->rooms_kinds = 1;
+    /* /create asks Text, Voice or Art; Down Down Enter picks Art, which the door cannot open yet. */
+    rc = drive(KEYS("\r" "/create Sketch\r" "\x1b[B" "\x1b[B" "\r" "/q\r"), 0);
+    assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "Sketch") == 0);
+    assert(strcmp(st->last_created_kind, "art") == 0);
+    assert(has_line(0, "Channel type: Text, Voice or Art?"));
+    assert(has_line(0, "Art channels are not on Amiga yet."));
+    assert(st->joins == 1);                                        /* only the auto-join: Art is not opened */
+    assert(strstr(screen_text, "[A] Paint") != 0);                 /* the Art room is marked */
+    assert(strstr(screen_text, "Talk") == 0);                      /* the Voice room is not listed for telnet */
+    stop_stub();
+    start_stub();
+    st->rooms_kinds = 1;
+    rc = drive(KEYS("\r" "/create Chatter --type voice\r" "/join talk\r" "/q\r"), 0);
+    assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "Chatter") == 0);
+    assert(strcmp(st->last_created_kind, "voice") == 0);
+    assert(!has_line(0, "Channel type:"));                         /* --type skips the question */
+    assert(has_line(0, "Voice channels are not on Amiga yet."));
+    assert(st->joins == 1);                                        /* only the auto-join: talk was refused */
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/create Bad --type sound\r" "/q\r"), 0);
+    assert(rc == 0 && st->rooms_created == 0);
+    stop_stub();
+    printf("  [OK] door: /create asks the channel type, --type skips it, Voice and Art rooms are marked and refused\n");
 }
 
 /* Reachability: the real door entry, clicks through the board's MOUSE? field. A right click on a
@@ -1119,6 +1151,7 @@ int main(void)
     test_door_idle_is_short_and_cadence_kept();
     test_door_poll_under_mouse_motion();
     test_door_new_room();
+    test_door_room_kind();
     test_door_mouse();
     test_door_scrollbar_drag();
     test_door_reply();
