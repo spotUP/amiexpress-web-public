@@ -15,6 +15,8 @@
  * It is deliberately not a "no dead code" rule - dead code is the symptom. The
  * failure it prevents is a fix that lands somewhere nothing runs.
  */
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { walk, entryPoints } from '../../dev-scripts/module-reachability';
 
@@ -129,5 +131,25 @@ describe('every file under src is reachable from an entry point', () => {
 
     expect(reachable.has(path.join('src', 'amiga-emulation', 'DoorLoader.ts'))).toBe(true);
     expect(reachable.has(path.join('src', 'amiga-emulation', 'session', 'DoorMessageHandler.ts'))).toBe(true);
+  });
+  it('follows a worker loaded by path, and drops it when the loader goes', () => {
+    // video-encoder.worker.ts is started with `new Worker(boot)` where boot
+    // requires path.join(__dirname, 'video-encoder.worker.ts'): no import names
+    // it, and the first version of this walk called the live worker dead.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reach-'));
+    try {
+      const loader = path.join(dir, 'loader.ts');
+      const worker = path.join(dir, 'job.worker.ts');
+      const bystander = path.join(dir, 'bystander.ts');
+      fs.writeFileSync(worker, 'export {};\n');
+      fs.writeFileSync(bystander, 'export {};\n');
+      fs.writeFileSync(loader, "const F = path.join(__dirname, 'job.worker.ts');\n");
+      expect(walk(loader, dir).reachable.has(worker)).toBe(true);
+      expect(walk(loader, dir).reachable.has(bystander)).toBe(false);
+      fs.writeFileSync(loader, 'export {};\n');
+      expect(walk(loader, dir).reachable.has(worker)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

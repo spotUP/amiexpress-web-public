@@ -35,6 +35,17 @@ const ENTRY = path.join(SRC, 'index.ts');
  * after it had been wired up with exactly that syntax.
  */
 const SPECIFIER = /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
+/**
+ * A source file loaded BY PATH rather than by import: a worker thread or a
+ * forked child (`new Worker(path.join(__dirname, 'x.worker.ts'))`, or a
+ * `require(WORKER_FILE)` inside a worker boot string). No import names it, so
+ * a graph of imports alone calls the worker dead while the server runs it.
+ * Only `path.join|resolve(__dirname, '<literal>.ts|js')` counts, and only when
+ * the file exists, so it is a precise edge from the loader, not a guess. A
+ * loader that goes away takes the edge with it and the worker is reported
+ * again.
+ */
+const PATH_LOADED = /\bpath\.(?:join|resolve)\(\s*__dirname\s*,\s*(['"])([^'"/][^'"]*\.(?:[cm]?[jt]s))\1\s*\)/g;
 /** A require/import whose argument is not a literal - the blind spot. */
 const COMPUTED = /\b(?:require|import)\s*\(\s*[^'")\s]/g;
 
@@ -188,6 +199,11 @@ export function walk(entries: string | string[] = entryPoints(), root: string = 
       } else if (!reachable.has(target)) {
         queue.push(target);
       }
+    }
+
+    for (const loaded of source.matchAll(PATH_LOADED)) {
+      const target = resolve(file, `./${loaded[2]}`);
+      if (target !== null && !reachable.has(target)) queue.push(target);
     }
   }
 
